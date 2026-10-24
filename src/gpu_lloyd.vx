@@ -1,0 +1,126 @@
+// Lloyd iterations on an NVIDIA GPU. Buffers are already in GPU_HBM.
+// The caller selects samples and initializes centers before this call.
+import core::num;
+
+// Each assignment loop pass writes one label. Each reduction pass writes one
+// center. Vx currently emits these loops without parallel launch metadata.
+pub fn vextor_gpu_lloyd_v1(points: *mut f32 in Memory::GPU_HBM,
+rows: i32, dims: i32, k: i32, iterations: i32,
+metric: i32, spherical: i32,
+centers: *mut f32 in Memory::GPU_HBM,
+next: *mut f32 in Memory::GPU_HBM,
+labels: *mut i32 in Memory::GPU_HBM) -> void {
+  let input = unsafe { tensor_view_2d(points, rows, dims) };
+  let mut centroids = unsafe { tensor_view_2d(centers, k, dims) };
+  let mut updated = unsafe { tensor_view_2d(next, k, dims) };
+  let mut assigned = unsafe { tensor_view_2d(labels, rows, 1) };
+
+  for iteration in 0..iterations {
+    let mut row_base = 0;
+    while row_base < rows {
+      spawn on(Topology::GPU) {
+        for lane in 0..256 {
+          let row = row_base + lane;
+          if row < rows {
+            let mut best = 0;
+            let mut best_distance: f32 = 0.0;
+            for center in 0..k {
+              let mut squared: f32 = 0.0;
+              let mut dot: f32 = 0.0;
+              let mut point_norm: f32 = 0.0;
+              let mut center_norm: f32 = 0.0;
+              for d in 0..dims {
+                let left = input[row][d];
+                let right = centroids[center][d];
+                let difference = left - right;
+                squared += difference * difference;
+                dot += left * right;
+                point_norm += left * left;
+                center_norm += right * right;
+              }
+              let mut score = squared;
+              if metric == 1 {
+                score = -dot;
+              }
+              if metric == 2 {
+                score = 1.0;
+                if point_norm == 0.0 && center_norm == 0.0 {
+                  score = 0.0;
+                }
+                if point_norm > 0.0 && center_norm > 0.0 {
+                  score = 1.0 - dot / (point_norm * center_norm).sqrt();
+                }
+              }
+              if center == 0 || score < best_distance {
+                best = center;
+                best_distance = score;
+              }
+            }
+            assigned[row][0] = best;
+          }
+        }
+      }
+      row_base += 256;
+    }
+
+    let mut center_base = 0;
+    while center_base < k {
+      spawn on(Topology::GPU) {
+        for lane in 0..64 {
+          let center = center_base + lane;
+          if center < k {
+            let mut count = 0;
+            for row in 0..rows {
+              if assigned[row][0] == center {
+                count += 1;
+              }
+            }
+            for d in 0..dims {
+              if count == 0 {
+                updated[center][d] = centroids[center][d];
+              } else {
+                let mut sum: f32 = 0.0;
+                for row in 0..rows {
+                  if assigned[row][0] == center {
+                    sum += input[row][d];
+                  }
+                }
+                updated[center][d] = sum / (count as f32);
+              }
+            }
+            if spherical != 0 {
+              let mut squared: f32 = 0.0;
+              for d in 0..dims {
+                let value = updated[center][d];
+                squared += value * value;
+              }
+              if squared > 0.0 {
+                let norm = squared.sqrt();
+                for d in 0..dims {
+                  updated[center][d] = updated[center][d] / norm;
+                }
+              }
+            }
+          }
+        }
+      }
+      center_base += 64;
+    }
+
+    let mut copy_base = 0;
+    while copy_base < k {
+      spawn on(Topology::GPU) {
+        for lane in 0..256 {
+          let center = copy_base + lane;
+          if center < k {
+            for d in 0..dims {
+              centroids[center][d] = updated[center][d];
+            }
+          }
+        }
+      }
+      copy_base += 256;
+    }
+  }
+  return;
+}

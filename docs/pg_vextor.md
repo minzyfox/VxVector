@@ -16,38 +16,53 @@ The reference flow is pgpu's: read vectors, run k-means on the GPU, write a cent
 
 Settle the questions that could block everything else before writing any k-means code.
 
-- [ ] Confirm whether Vx can export a C ABI (a shared library with `extern "C"` entry points). Everything in Milestone 3 depends on this.
-- [ ] If not, decide the fallback: a Rust or C shim linking Vx output, or a sidecar process (see Production hardening).
-- [ ] Define the error boundary: Vx code must never unwind or longjmp into a Postgres backend. Write down how failures cross the ABI (return codes, error structs).
-- [ ] Check how Vx selects its dispatch backend. The README says `build.rs` picks it from what the build machine has, so a portable build made without CUDA ships only the CPU backend. Decide how an extension package should handle this.
-- [ ] Stand up a dev environment: Postgres 17 or 18, pgvector, VectorChord, a CUDA-capable GPU, and the Vx toolchain.
-- [ ] Run pgpu once end to end on a small table to capture reference output (centroid table, index, query plan with `EXPLAIN`).
-- [ ] Read pgpu's source for the centroid table schema and the exact `CREATE INDEX` options it passes to VectorChord, so our output matches the contract.
+Feasibility decisions and the deferred GPU reference run are recorded in
+[Milestone 0 findings](milestone_0_feasibility.md).
+The GPU run does not block standalone implementation. Assume the target GPU is
+available, then verify the behavior on real hardware when a host is available.
+
+- [x] Confirm whether Vx can export a C ABI (a shared library with `extern "C"` entry points). Everything in Milestone 3 depends on this. Verified with a macOS arm64 C caller; Linux CUDA verification remains.
+- [x] Decide the integration boundary. The C ABI works, and the GPU worker will run in a separate process because the current Vx runtime can abort.
+- [x] Define the error boundary: Vx code must never unwind or longjmp into a Postgres backend. Write down how failures cross the ABI (return codes, error structs).
+- [x] Check how Vx selects its dispatch backend. The README says `build.rs` picks it from what the build machine has, so a portable build made without CUDA ships only the CPU backend. Decide how an extension package should handle this.
+- [ ] When a CUDA host is available, stand up a dev environment: Postgres 17 or 18, pgvector, VectorChord, a CUDA-capable GPU, and the Vx toolchain. This does not block Milestone 1.
+- [ ] When a CUDA host is available, run pgpu once end to end on a small table to capture reference output (centroid table, index, query plan with `EXPLAIN`). This does not block Milestone 1.
+- [x] Read pgpu's source for the centroid table schema and the exact `CREATE INDEX` options it passes to VectorChord, so our output matches the contract. Confirm the remaining root-parent discrepancy in a live run.
 
 ## Milestone 1: standalone k-means in Vx
 
 Get a correct, benchmarkable k-means running with no Postgres involved. The parameters mirror pgpu's function signature, which is the practical spec.
 
-- [ ] Implement the core loop: assign points to nearest centroid, recompute centroids, repeat for `kmeans_iterations` (pgpu default 10).
-- [ ] Support the three distance operators: `ip`, `l2`, `cos`.
-- [ ] Add `spherical_centroids`: normalize centroids to the unit sphere (needed for `ip` and for unit-normalized datasets).
-- [ ] Add sampling: take `sampling_factor` samples per centroid (pgpu default 256; its docs advise against values below 40).
-- [ ] Add `kmeans_nredo` restarts and keep the best run.
-- [ ] Add two-level (hierarchical) clustering: `lists` as one value (flat) or two (root level, leaf level).
-- [ ] Add batched execution: when `batch_size` is smaller than `lists * sampling_factor`, cluster in multiple batches to bound memory.
-- [ ] Write correctness tests against a CPU reference (faiss-cpu or numpy) on small data: centroid quality, assignment agreement, determinism with a fixed seed.
-- [ ] Handle edge cases: empty clusters, fewer rows than centroids, duplicate vectors, dimensions up to at least 2000 (pgpu's example) and ideally 3072.
-- [ ] Expose a plain library API (arrays in, centroids out) so it is reusable outside Postgres.
+The CPU library, its checks, and the compile-only GPU prototype are described
+in [Milestone 1 notes](milestone_1_standalone.md).
+
+- [x] Implement the core loop: assign points to nearest centroid, recompute centroids, repeat for `kmeans_iterations` (pgpu default 10).
+- [x] Support the three distance operators: `ip`, `l2`, `cos`.
+- [x] Add `spherical_centroids`: normalize centroids to the unit sphere (needed for `ip` and for unit-normalized datasets).
+- [x] Add sampling: take up to `sampling_factor` distinct samples per centroid (pgpu default 256; its docs advise against values below 40).
+- [x] Add `kmeans_nredo` restarts and keep the best run on the same sample.
+- [x] Add two-level (hierarchical) clustering: `lists` as one value (flat) or two (root level, leaf level). The standalone API uses `root_count = 0` for flat.
+- [x] Process sampled rows in batches when `batch_size` is smaller than the sample count. Input stays resident until Milestone 2 adds streaming.
+- [x] Write correctness tests against an independent exhaustive CPU reference on small data: centroid quality, assignment agreement, determinism with a fixed seed.
+- [x] Handle edge cases: empty clusters, fewer rows than centroids, duplicate vectors, dimensions 2000 and 3072.
+- [x] Expose a plain library API (arrays in, centroids out) so it is reusable outside Postgres.
+- [ ] Run and optimize the GPU path on NVIDIA hardware. The current GPU prototype compiles to A100 code but emits no parallel launch metadata.
 
 ## Milestone 2: data path
 
 The flow reads a table, clusters, then writes centroids back, so moving vectors to the GPU efficiently is likely where a database background adds the most. This is my inference from the pipeline's shape, not something pgpu's README measures, so the first task is to measure it.
 
+The host-side batch and sampling design is in [Milestone 2 data path](milestone_2_data_path.md).
+
 - [ ] Profile pgpu's pipeline to see where time goes: table read, host-to-device transfer, clustering, centroid write, index build. Decide what to optimize from data.
-- [ ] Design the host-side batch format: contiguous row-major or columnar float32 buffers sized by `batch_size`, with pinned host memory if Vx supports it.
+- [x] Design the host-side batch format: contiguous row-major float32 buffers sized by `batch_size`. Pinned host memory needs GPU validation.
 - [ ] Implement streaming: read the next batch while the GPU processes the current one (double buffering) so the GPU is not idle during reads.
 - [ ] Handle sampling at read time: pick `lists * sampling_factor` rows without reading the whole table into memory.
-- [ ] Support the pgvector `vector` type (float32) first; list `halfvec` and other quantization types as later work.
+- [ ] Support pgvector `vector` (float32) input first and validate its dimensions and distance operator.
+- [ ] Add `halfvec` input: convert float16 components to float32 for clustering, then verify centroid output and VectorChord index compatibility.
+- [ ] Evaluate `sparsevec` input with bounded storage. Verify distance behavior and VectorChord compatibility before adding it to the SQL API.
+- [ ] Evaluate `bit` input separately. Define clustering for Hamming or Jaccard distance and verify VectorChord support before promising a binary index path.
+- [ ] Test each supported input type through the SQL function, centroid table, index build, and nearest-neighbor query.
 - [ ] Use Vx's placement types to make host/device pointer mistakes a compile error, and record where the types helped or got in the way.
 - [ ] Define memory limits: what happens when the table is larger than device memory (batching) or host memory (streaming).
 
@@ -61,7 +76,7 @@ Wrap the Vx k-means in a pgrx extension that produces the same centroid table pg
 - [ ] Read vectors from the table in batches and feed the Milestone 2 data path.
 - [ ] Write the centroid table in the format VectorChord's external build expects (confirm against the VectorChord docs and pgpu's output).
 - [ ] Issue `CREATE INDEX ... USING vchordrq` with `build.external` pointing at the centroid table; support `skip_index_build` to stop after the centroids.
-- [ ] Convert every Vx failure into a Postgres error through the pgrx error path. Test: GPU missing, out of device memory, bad arguments, cancelled query.
+- [ ] Convert Vx failures into Postgres errors through the pgrx error path. Test: out of device memory, bad arguments, and cancelled queries. A missing GPU selects the CPU path with the warning specified below.
 - [ ] Respect query cancellation and statement timeouts during long GPU runs.
 - [ ] Write `pg_regress` tests (pgpu has a `tests/pg_regress` directory to model on).
 - [ ] Verify with `EXPLAIN` that queries use the resulting index.
@@ -102,6 +117,7 @@ Start on NVIDIA, since pgpu and cuVS are NVIDIA-only today and give a direct bas
 - [ ] Keep the k-means code free of backend-specific calls so a new backend needs no algorithm changes.
 - [ ] Define a small backend test matrix: which operations (matmul, reductions, atomics, sorting) the algorithm needs, and check each against every new backend as it lands.
 - [ ] Add a CPU fallback path with the same output, so the extension works without a GPU (slower) and tests run in CI without one.
+- [ ] When the extension selects the CPU fallback because no supported GPU is available, emit a PostgreSQL WARNING that GPU acceleration is unavailable and CPU k-means is running. Loading the extension alone should not require a GPU. Test the warning and successful CPU index build on a host without a GPU.
 - [ ] Re-run the Milestone 4 benchmarks on each new backend (AMD, Apple) and compare centroid quality and recall, not only speed.
 - [ ] Decide the runtime policy: build one binary that detects the backend at run time, or one build per backend. Account for the build-time backend selection noted in Milestone 0.
 - [ ] Document support honestly per backend (experimental, supported, unsupported).
