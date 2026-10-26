@@ -1,0 +1,24 @@
+[package]
+name = "pg_vextor"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = ["pg17"]
+pg17 = ["pgrx/pg17"]
+
+[dependencies]
+pgrx = { version = "=0.16.1", default-features = false }
+serde_json = "1"
+
+[build-dependencies]
+cc = "1"
+
+[profile.dev]
+debug = 0
+
+[profile.release]
+lto = "thin"

@@ -1,0 +1,15 @@
+*
+!docker/
+!docker/Dockerfile.extension
+!docker/020-vextor.sql
+!pg_vextor/
+!pg_vextor/**
+pg_vextor/target/
+!src/
+!src/*.c
+!include/
+!include/*.h
+!build/
+!build/linux/
+!build/linux/kmeans.o
+!build/linux/libpg_vextor.so

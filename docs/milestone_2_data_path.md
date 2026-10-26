@@ -1,60 +1,120 @@
-# Milestone 2: host data path
+# Milestone 2: CPU host data path
 
-This is the data path design that can be checked without a GPU or PostgreSQL.
-The database reader, GPU transfers, and timing measurements remain implementation work.
+Implemented and checked on 2026-10-26 on Apple M4 Pro with the local Vx compiler.
+GPU acceleration will come later. This milestone requires neither PostgreSQL nor CUDA.
 
-## Input contract
+## Implemented API
 
-The first database version accepts dense pgvector `vector` values. Each component
-becomes an `f32`. Reject null vectors, nonfinite components, mixed dimensions,
-and unsupported column types before calling Vx. `halfvec`, `bit`, and
-`sparsevec` need separate conversion and compatibility work.
+`include/vextor_data_path.h` defines the host adapter alongside the existing Vx array ABI.
+`src/data_path.c` implements source reading, sampling, allocation checks, and timing.
+The clustering algorithm remains in `src/kmeans.vx`.
 
-A host batch owns `rows * dims` contiguous `f32` values in row-major order.
-Its byte size is `4 * rows * dims`. Use `batch_size` as a maximum row count,
-and check every size multiplication before allocation. The database reader
-fills the batch, and the worker copies selected rows into its sample matrix.
-Release or reuse the read batch after those rows are copied.
-Pinned memory is a later GPU-specific choice; ordinary host memory is enough
-for the CPU path.
+- `vextor_plan_cpu_v1` validates a request and calculates all adapter buffer sizes without allocating memory.
+- `vextor_run_cpu_v1` reads the source, collects a sample, and calls `vextor_kmeans_v1` once.
+- `vextor_free_cpu_result_v1` releases the result and clears its pointers. Releasing an empty result is safe.
 
-## Bounded centroid training
+The reader returns one dense float32 vector, EOF, or an error per call.
+The adapter packs rows into contiguous row-major batches, capped by `batch_size` and the source count.
+Reader storage must remain valid until the next reader call. The adapter copies each row before that call.
+The result owns the sampled vectors, their source positions, centroids, parent IDs, and sample assignments.
+Callers must release an existing result before reusing its destination.
+Failures leave an empty result and return a status with an optional bounded error message.
 
-Let `N` be the number of source rows, `L` the leaf count, `F` the sampling
-factor, and `S = min(N, L * F)`. Keep at most `S` sampled vectors in memory,
-plus one database read batch. The present `vextor_kmeans_v1` function needs a
-contiguous input matrix, but it does not need the complete table to train
-centroids. Its assignments buffer can cover those `S` sampled rows. The
-centroid table does not use assignments for all `N` source rows.
+## Input validation and source contract
 
-Use a stable source row order and the same database snapshot for an exact row
-count and the sample scan. Compute `S` distinct row positions from the seed,
-then collect those positions during the scan. Store the sampled vectors in
-sample order. This retains a repeatable sample without materializing the
-whole table. The existing Vx function will permute that sample again for
-initialization. Its centroids therefore need not be byte-identical to a call
-that receives every source row. Compare quality and recall with pgpu after a
-GPU host becomes available.
+The adapter accepts only dense `vector` rows represented as float32 components.
+It rejects null vectors, mixed dimensions, unsupported row types, and nonfinite components before calling Vx.
+It validates every source row, including rows outside the sample.
+It also validates clustering options, including the distance code and spherical flag.
+`halfvec`, `sparsevec`, and `bit` remain separate future work.
 
-For the first CPU integration, collect the sample and call the existing Vx
-function once. Do not claim that its current `batch_size` argument bounds
-input memory: it only divides the training loop into batches. A later worker
-API can accept batches directly and overlap reads with GPU work.
+The caller supplies an exact 64-bit source count, capped at `i64::MAX`.
+The adapter rejects early EOF, additional rows, and reader errors.
+The reader must use a stable row order and the same snapshot for counting and scanning.
+Count checks cannot detect reordered or replaced rows when the count stays unchanged.
+M3 must enforce the snapshot contract in the PostgreSQL reader.
+M3 must also validate the declared SQL column type before scanning.
 
-The worker must reject a request before allocation if the checked total for
-the sample, read batch, centroid output, scratch buffers, and index arrays
-exceeds its configured memory budget. Use a wider row counter during the
-database scan. The current Vx ABI uses `i32` for its sampled row count, so
-reject `S > i32::MAX` until that ABI changes.
+Reader callbacks must return errors without unwinding or jumping across the C call.
+A future database reader must translate cancellation into a reader error.
+The separate worker and Postgres error conversion remain M3 work.
 
-## Checks before the database integration
+## Bounded sampling and training
 
-- Compare centroids from a collected sample with a call on the same sample
-  supplied directly to Vx.
-- Check that sampling is repeatable and produces distinct source row positions.
-- Check batches of one row and batches larger than the table.
-- Check allocation overflow and budget rejection before any Vx call.
-- Check that a table larger than the sample does not allocate `N * dims` values.
+Let `N` be source rows, `L` leaves, `F` the sampling factor, and `S = min(N, L * F)`.
+The adapter retains `S` sampled vectors and one read batch, rather than `N` vectors.
+It rejects `S > i32::MAX` because the Vx array ABI uses an `i32` sampled row count.
 
-GPU transfer overlap, pinned memory, and timing for each database stage need
-the PostgreSQL wrapper and an NVIDIA host. Those checks remain open.
+Floyd's algorithm selects distinct source positions with storage proportional to `S`.
+SplitMix64 and rejection sampling define repeatable random draws without modulo bias.
+An open-addressed hash table records selected positions.
+An in-place heapsort orders scan positions without an additional allocation.
+Each position retains its destination, so sampled vectors remain in seeded selection order.
+Batch size does not affect the sample or clustering results.
+
+The adapter calls the existing CPU library with the collected sample.
+That library applies its own permutation for initialization and training order.
+Adapter output therefore matches a direct call on the collected sample.
+It need not match a direct call on the complete source table.
+The array API's `batch_size` still batches computation rather than bounding its input storage.
+
+## Memory budget
+
+Planning checks every buffer size and their sum against `SIZE_MAX` and `PTRDIFF_MAX` before allocation.
+The adapter rejects budget excess before allocation, source reads, or Vx calls.
+Allocation failure returns a recoverable status and releases all partial allocations.
+
+For `D` dimensions, `B = min(N, batch_size)`, and `C = 1 + root_count + L`, buffers contain:
+
+| Buffer | Bytes |
+| --- | ---: |
+| Sample vectors | `4 * S * D` |
+| Read batch | `4 * B * D` |
+| Centroid output | `4 * C * D` |
+| Parents | `4 * C` |
+| Sample assignments | `4 * S` |
+| Current centroids and sums | `8 * L * D` |
+| Cluster counts | `4 * L` |
+| Returned source positions | `8 * S` |
+| Sorted positions and destinations | `16 * S` |
+| Sampling hash table | `8 * H` |
+
+`H` is the smallest power of two at least `2 * S`.
+The implementation uses `sizeof` when calculating actual allocation sizes.
+The budget covers all adapter heap buffers, which coexist during execution.
+It excludes allocator overhead, caller-owned reader storage, stack storage, and Vx runtime memory.
+M3 must account for database reader and worker transport storage separately.
+The result retains sample buffers for inspection until the caller releases it.
+
+## Verification
+
+```sh
+./scripts/build.sh
+python3 -B -m unittest discover -s tests -v
+./scripts/check_data_path.sh
+./build/benchmark_data_path 1000 16 8 40 64
+./build/benchmark_data_path 100000 16 8 40 64
+```
+
+The Python suite passes 18 tests: nine standalone checks and nine adapter checks.
+Adapter checks compare direct Vx calls for every metric and flat/two-level trees.
+They also cover deterministic distinct sampling, sample-to-source agreement, batch boundaries, invalid rows, count changes, overflow, and budget rejection.
+
+The native harness tracks actual allocation sizes and injects failure into each allocation.
+It checks cleanup, rejection before reader or Vx calls, and storage independent of total source rows.
+It also checks Vx error returns and nonfinite centroid rejection.
+Address and undefined-behavior sanitizer checks pass.
+
+The benchmark generates one row at a time and reports read/validation, sampling, clustering, and total elapsed times.
+These smoke runs used 16 dimensions, eight leaves, sampling factor 40, and batches of 64 rows.
+Both retained 320 sampled rows and requested 43,396 bytes of adapter buffers.
+The 1,000-row run took about 0.0039 seconds; the 100,000-row run took about 0.0086 seconds.
+These are single local smoke measurements, not database or GPU performance claims.
+Raw output and the Vx compiler revision are in [M2 smoke evidence](evidence/m2_cpu_2026-10-26.txt).
+
+## Remaining integration work
+
+M2 completes the reusable CPU host data path.
+M3 supplies the PostgreSQL reader, snapshot enforcement, worker process, centroid-table writes, and VectorChord index creation.
+Database reads, worker communication, centroid writes, and index builds need timings through that integration.
+GPU transfers, pinned memory, double buffering, and hardware measurements remain in M5.

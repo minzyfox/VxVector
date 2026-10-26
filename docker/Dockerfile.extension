@@ -1,0 +1,16 @@
+FROM vextor-postgres:17-dev AS builder
+WORKDIR /opt/vextor-src
+COPY src/ src/
+COPY include/ include/
+COPY build/linux/kmeans.o build/linux/kmeans.o
+RUN mkdir -p /opt/vextor \
+    && cc -O2 -fPIC -I include -c src/data_path.c -o /opt/vextor/data_path.o \
+    && cc -shared -Wl,--no-undefined build/linux/kmeans.o /opt/vextor/data_path.o -lm -o /opt/vextor/libvextor_kmeans.so \
+    && cc -O2 -Wall -Wextra -Werror -I include src/worker.c -L /opt/vextor \
+       -lvextor_kmeans -Wl,-rpath,'$ORIGIN' -o /opt/vextor/vextor-worker
+
+FROM vextor-postgres:17-dev AS runtime
+COPY --from=builder /opt/vextor/vextor-worker /opt/vextor/libvextor_kmeans.so /usr/local/libexec/vextor/
+COPY build/linux/libpg_vextor.so /usr/lib/postgresql/17/lib/pg_vextor.so
+COPY pg_vextor/pg_vextor.control pg_vextor/sql/pg_vextor--0.1.0.sql /usr/share/postgresql/17/extension/
+COPY docker/020-vextor.sql /docker-entrypoint-initdb.d/

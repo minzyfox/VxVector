@@ -1,0 +1,27 @@
+name: vextor
+
+services:
+  postgres:
+    image: ${VEXTOR_POSTGRES_IMAGE:-vextor-postgres:17-vextor}
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.extension
+      target: runtime
+    environment:
+      POSTGRES_USER: vextor
+      POSTGRES_DB: vextor
+      POSTGRES_PASSWORD: ${VEXTOR_POSTGRES_PASSWORD:?Set VEXTOR_POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${VEXTOR_POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vextor -d vextor"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  postgres_data:

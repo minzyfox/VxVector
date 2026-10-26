@@ -12,17 +12,25 @@ mkdir -p "$project_root/build"
   "$vx_root/target/$profile/vxc" "$project_root/src/kmeans.vx" \
     --action emit-obj -o "$project_root/build/kmeans.o"
 
+  clang -std=c11 -Wall -Wextra -Werror -fPIC -I "$project_root/include" \
+    -c "$project_root/src/data_path.c" -o "$project_root/build/data_path.o"
+
   if [[ "$(uname -s)" == "Darwin" ]]; then
-    clang -dynamiclib "$project_root/build/kmeans.o" \
+    clang -dynamiclib "$project_root/build/kmeans.o" "$project_root/build/data_path.o" \
       "$vx_root/target/$profile/libvx_std_core.dylib" \
       -Wl,-rpath,"$vx_root/target/$profile" \
       -o "$project_root/build/libvextor_kmeans.dylib"
   else
-    clang -shared "$project_root/build/kmeans.o" \
+    clang -shared "$project_root/build/kmeans.o" "$project_root/build/data_path.o" \
       "$vx_root/target/$profile/libvx_std_core.so" \
       -Wl,-rpath,"$vx_root/target/$profile" -lm \
       -o "$project_root/build/libvextor_kmeans.so"
   fi
+
+  clang -std=c11 -Wall -Wextra -Werror -I "$project_root/include" \
+    "$project_root/scripts/benchmark_data_path.c" -L "$project_root/build" \
+    -lvextor_kmeans -Wl,-rpath,"$project_root/build" \
+    -o "$project_root/build/benchmark_data_path"
 
   if [[ "${VX_CHECK_GPU:-0}" == "1" ]]; then
     "$vx_root/target/$profile/vxc" --machine "$vx_root/fleet/a100-40.vx" \

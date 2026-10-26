@@ -1,1 +1,3 @@
 /build/
+/.env
+/pg_vextor/target/
