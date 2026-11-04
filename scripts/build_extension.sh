@@ -8,6 +8,24 @@ test -f "$project_root/build/linux/kmeans.o" || {
   echo "Run scripts/build_linux_worker.sh first." >&2
   exit 1
 }
+python3 - "$project_root" <<'PY_CHECK'
+import hashlib
+import json
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+info_path = root / 'build/linux/vx-build-info.json'
+if not info_path.exists():
+    sys.exit('Run scripts/build_linux_worker.sh to record the compiler and kernel provenance first.')
+info = json.loads(info_path.read_text())
+if info['vx_revision'] != (root / 'vx-revision.txt').read_text().strip():
+    sys.exit('The Linux object uses a different Vx pin. Rebuild it with scripts/build_linux_worker.sh.')
+for key, path in [('kernel_sha256', root / 'src/kmeans.vx'),
+                  ('object_sha256', root / 'build/linux/kmeans.o')]:
+    if info[key] != hashlib.sha256(path.read_bytes()).hexdigest():
+        sys.exit('The Linux kernel changed after its build. Run scripts/build_linux_worker.sh again.')
+PY_CHECK
+
 if ! docker inspect "$builder" >/dev/null 2>&1; then
   docker run -d --name "$builder" --dns 8.8.8.8 --dns 1.1.1.1 \
     --mount type=volume,source=vextor_extension_build,target=/opt/vextor-src \

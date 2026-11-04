@@ -27,6 +27,14 @@ The later GPU path will use the same flow and centroid-table format. The referen
 - First success: build and query a VectorChord index from Vx CPU centroids without GPU hardware or CUDA libraries. Validate flat and two-level trees.
 - Later success: add optional GPU acceleration and compare recall and build time against pgpu/cuVS on the same dataset (threshold TBD).
 
+## Core library and integration boundary
+
+The reusable k-means core uses native Vx calls and contracts. It does not require a C ABI between its internal functions.
+Keep clustering, distances, normalization, and hierarchy construction independent of PostgreSQL and VectorChord's table representation.
+The C ABI is an integration adapter. In the current Postgres flow, the separate C worker calls the exported Vx entry point through it.
+Keep foreign-buffer validation, IPC, and SQL concerns at those integration boundaries.
+A future standalone Vx caller should use the core directly, without the Postgres adapter.
+
 ## Milestone 0: groundwork and feasibility
 
 Settle the questions that could block everything else before writing any k-means code.
@@ -114,19 +122,85 @@ Implemented and validated without GPU hardware or CUDA libraries. See [M3 detail
 
 ## Milestone 4: end-to-end CPU tests and correctness validation
 
+Updated November 4, 2026: 48 matched Faiss cases, 96 independent Lloyd cases,
+25 native tests, and six zero/duplicate cases pass. The corrected worker passes
+120 synthetic SQL recall queries and 3,072 real-data queries across 24 paired
+Vx/internal index builds. See [M4 evidence and limits](milestone_4_cpu_correctness.md).
+M4 remains open for internal clustering objectives, full kernel proofs, and a hosted CI result.
+
+The CPU and database suites also pass after the Vx `7cc3d2d9` upgrade.
+See [the upgraded-worker results](evidence/vx_main_test_summary_2026-11-04.json).
+Native and Linux kernel builds use [vx-revision.txt](../vx-revision.txt).
+The local database now runs the Vx `7cc3d2d9` worker image and reports healthy.
+Its data volume and database cluster identifier are unchanged.
+Linux and macOS contract/code-generation checks and upgraded-worker database validation passed.
+See [the Vx main update](vx_main_update_2026-11-04.md).
+
+### Compiler upgrade and local database handoff
+
+- [x] Pin native builds and CI to upstream Vx main at `7cc3d2d95fb61f0b80d3b0bd1d8ff38b833f1c47`.
+- [x] Build the native compiler/library and Linux kernel object from that pin. Record compiler, source, and object hashes.
+- [x] Use borrowed metric enums and explicit validity, initialization, and copy non-overlap contracts. Require the flat code generator.
+- [x] Reject packaging when the Linux object, kernel source, or compiler pin differs from its build manifest.
+- [x] Build and install the PostgreSQL image with the new Linux object and packaged provenance. Verify startup, installed revision, and unchanged database identity. See [installation evidence](evidence/vx_main_install_2026-11-04.json).
+- [x] Run the Linux/macOS contract and code-generation checks and the complete CPU/database pipeline against the upgraded worker. Preserve the new results separately from earlier evidence.
+
+
 Establish correctness before changing arithmetic or adding GPU execution.
 M1 through M3 provide reference checks and small integration smoke tests. Extend that evidence to representative inputs and final-index quality.
 Collect timings for diagnosis and repeatability. The cuVS performance comparison belongs to M7.
 
 - [x] Run small CPU extension checks for centroid output, flat/two-level indexes, actual index scans, snapshot consistency, and failure handling. See [M3 evidence](evidence/m3_cpu_2026-10-26.txt).
-- [ ] Extend end-to-end coverage across L2, inner product, cosine, spherical centroids, seeds, sampling factors, restarts, and batch sizes.
-- [ ] Cover representative dimensions, including 128, 768, 2000, and 3072, with duplicate vectors, empty clusters, and zero vectors.
-- [ ] Compare clustering objectives and assignments against independent reference calculations on controlled datasets.
-- [ ] Calculate exact nearest neighbors and measure final-index recall at fixed query probes and settings.
-- [ ] Define correctness tolerances and a minimum recall target before evaluating optimized kernels.
-- [ ] Validate larger source tables and bounded sampling through SQL, including memory-budget rejection and concurrent writes.
-- [ ] Record datasets, seeds, versions, settings, and raw results. Distinguish native hardware from emulated development environments.
-- [ ] Automate CPU library, worker, and end-to-end Postgres checks in CI without GPU or CUDA dependencies.
+- [x] Extend end-to-end coverage across L2, inner product, cosine, spherical centroids, seeds, sampling factors, restarts, and batch sizes.
+- [x] Cover representative dimensions, including 128, 768, 2000, and 3072, with duplicate vectors, empty clusters, and zero vectors.
+- [x] Add [Faiss CPU k-means](https://github.com/facebookresearch/faiss/wiki/K%E2%80%90means-clustering) as the primary external correctness reference. Keep performance comparisons outside this stage.
+- [x] Extend known-answer synthetic checks with unequal-norm distributions and real GloVe-25/SIFT-128 subsets. Record source files and selected-array hashes.
+- [x] Supply exactly the same float32 sample to both implementations. Disable additional reference-library subsampling or match it explicitly.
+- [x] Match the distance metric, input normalization, spherical-centroid behavior, iterations, restarts, and stopping rules. Record differences that cannot be matched.
+- [x] Address initialization explicitly. The current Vextor API accepts a seed, not initial centroids; equal seeds across libraries do not imply equal initialization.
+- [x] Reconstruct Vx sample ordering and initialization for strict Faiss comparisons. Supply identical initial centroids to Faiss. No additional public initialization API is needed for these fixtures.
+- [x] Match centroids up to permutation before comparing coordinates and assignments. Handle equal-distance ties explicitly.
+- [x] Recompute clustering objectives independently from the returned centroids. Compare objective values, assignments, and centroids using declared numerical tolerances.
+- [x] Validate the centroid tree separately: parent assignments, equal leaf depth, node counts, dimensions, and normalization. Reproduce Vextor's leaves-first hierarchy rather than assuming another hierarchical algorithm is equivalent.
+- [x] Check empty clusters, duplicate vectors, and zero vectors separately. Align policies where possible and document expected differences.
+- [ ] Optionally cross-check L2 against [scikit-learn KMeans](https://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html) with Lloyd's algorithm and explicit initialization.
+- [x] Compute exact nearest neighbors with PostgreSQL sequential scans on the same source snapshot. Verify the ground-truth query plan does not use an approximate index.
+- [x] Compare the final VectorChord index against that ground truth at fixed probes and query settings. Define tie handling, correctness tolerances, and a minimum recall target before SIMD work.
+- [x] Compare Vx external centroid training with VectorChord's internal CPU trainer on the same real datasets, source snapshots, and held-out queries. Match available training and index settings; record differences in sampling, initialization, stopping rules, and empty-cluster handling rather than assuming equal seeds imply equal starts.
+- [x] Repeat paired index builds with Vx seeds 0 and 17 and independent internal builds. Compare tie-aware recall across four probe/epsilon settings against exact scans. Apply predefined per-query conservative and mean relative quality gates. Record raw output and diagnostic timings.
+- [ ] Compare independently recomputed clustering objectives with VectorChord's internal trainer. Version 1.1.1 has no SQL centroid export or configurable training seed. Add instrumentation or a supported export path before claiming this comparison.
+- [x] Preserve scalar reference results and fixtures for later SIMD and GPU regression checks.
+- [x] Validate larger source tables and bounded sampling through SQL, including memory-budget rejection and concurrent writes.
+- [x] Record datasets, seeds, versions, settings, and raw results. Distinguish native hardware from emulated development environments.
+- [x] Implement CPU library, worker, contract-example, and end-to-end Postgres checks in CI without GPU or CUDA dependencies. Pin the compiler revision and dataset hashes.
+- [ ] Record a successful hosted run of the CPU CI workflow. Local component checks passed.
+
+Different centroid coordinates alone do not prove a defect. K-means can reach different local optima when initialization or algorithm policies differ.
+Strict differential checks require matched conditions. Broader quality comparisons must distinguish valid alternative solutions from correctness failures.
+Faiss spherical clustering is a reference only where its normalization and assignment semantics match Vextor's chosen mode.
+
+### Targeted compile-time verification in the Vx core
+
+Use Vx invariants and Z3 where a proof prevents a realistic error or supplies a useful contract to callers.
+Establish the reference-test baseline first. Add small structural proofs alongside that validation, with SIMD bounds proofs continuing in M5.
+Do not make whole-algorithm verification a prerequisite for CPU correctness work.
+
+- [x] Check native Vx contracts on both available compilers. Record accepted bounded-index, fixed-offset, and positive-count helpers. Retain reduced nearest-loop and variable-offset examples that the current verifier cannot prove.
+- [ ] Start with `nearest`: require a positive centroid count and prove that its result is a valid centroid index.
+- [ ] Carry that result contract into centroid updates so accesses to counts and sums use valid cluster indices.
+- [ ] Prove distance and centroid buffer indices stay within the native buffer/view bounds, given valid dimensions and row/centroid indices.
+- [ ] Check multiplication, addition, and offsets for machine-integer overflow. Mathematical-integer bounds alone do not establish machine-arithmetic safety.
+- [ ] Establish that centroid division occurs only when the cluster count is positive. Keep the empty-cluster replacement path explicit.
+- [ ] Prove sampled row indices are within the source range. Consider sampling-distinctness proofs later if their benefit justifies the complexity.
+- [x] State pointer preconditions on internal unsafe helpers separately from C ABI shape checks and caller allocation obligations. Foreign allocation sizes and lifetimes remain trusted obligations.
+- [x] Add accepted and rejected helper-contract examples, with four mutation checks that fail at the intended diagnostics. Full kernel contract integration remains open.
+- [x] Record solver timings and unsupported obligations. The helper examples replace no kernel or foreign-buffer runtime checks. Retain those checks until actual kernel contracts pass.
+
+Prefer these integer, indexing, and control-flow properties over attempting to prove clustering quality in Z3.
+Finite inputs can still overflow floating-point accumulators. SIMD reassociation and FMA can also change rounding and assignments.
+Continue independent objective calculations and final-index recall checks for numerical behavior.
+Do not claim global optimality, convergence, or monotonic objectives across all metrics and empty-cluster policies without separate justification.
+Defer annotations that add solver complexity without protecting a meaningful boundary or simplifying callers.
 
 Exit criterion: the complete CPU flow passes the defined correctness and recall checks with reproducible evidence.
 
@@ -134,18 +208,20 @@ Exit criterion: the complete CPU flow passes the defined correctness and recall 
 
 Improve CPU computation while improving Vx's SIMD facilities alongside the application.
 The current worker build omits `-O3`, and Vx defaults to `-O0`.
-The inspected Linux object uses scalar arithmetic in the distance and centroid loops.
-That result does not establish what an optimized build can generate.
+Earlier Linux inspection found scalar distance and centroid loops.
+The upgraded kernel has no recorded profiling or packed-instruction inspection yet.
+Inspect the new pinned build before drawing optimization conclusions.
 
 - [ ] Build the existing kernels with `-O3`. Inspect generated instructions and measure against the current scalar baseline before rewriting kernels.
 - [ ] Profile CPU clustering to identify the loops that justify SIMD work.
-- [ ] Separate L2, inner-product, and cosine kernels so each computes only the required quantities.
+- [x] Separate L2, inner-product, and cosine loops through borrowed metric-enum dispatch. Each computes only the required quantities. Performance measurement remains open.
 - [ ] Evaluate automatic vectorization, native Vx vector values, and inline `mlir!` for the hot loops. Record limitations with small compiler examples.
 - [ ] Enhance Vx vector loads/stores for existing float buffers with explicit alignment, bounds, and aliasing contracts.
 - [ ] Improve `std::simd` with useful load/store, arithmetic, reduction, and scalar-tail operations. Support appropriate lane widths and target capabilities.
 - [ ] Audit the current Rust-backed SIMD helpers for actual packed instructions, FFI overhead, pointer aliasing, and documented fused-operation behavior.
 - [ ] Prefer vector operations that remain in registers across the kernel. Avoid a separate FFI call for every small arithmetic operation.
 - [ ] Implement vectorized distance, centroid accumulation, and normalization where profiling supports them. Handle dimensions that are not lane multiples.
+- [ ] Apply targeted Vx bounds proofs to full SIMD loads and stores, their alignment requirements, and the scalar or masked tail. Use runtime checks where proof is unavailable.
 - [ ] Define floating-point reduction order, reassociation, and FMA behavior explicitly. Keep a scalar reference and avoid silently enabling broad fast-math assumptions.
 - [ ] Add Vx compiler and standard-library checks for generated SIMD instructions, scalar tails, unaligned buffers, numerical behavior, and supported CPU targets.
 - [ ] Rerun M4's correctness and recall checks. Measure kernel and total-build improvements without claiming cuVS competitiveness yet.
@@ -200,23 +276,42 @@ Exit criterion: reproducible performance and recall comparisons against cuVS, wi
 - [ ] Evaluate `bit` separately. Define Hamming or Jaccard clustering and verify VectorChord support before promising a binary index path.
 - [ ] Test each added input type through the SQL function, centroid table, index build, and nearest-neighbor query.
 
-## Vx language and library gaps to propose
+## Vx capabilities to evaluate and gaps to propose
 
-Compiler and library enhancements are part of the main implementation sequence, especially M5 and M6.
-For each gap, keep an application example and an upstream regression check alongside the proposed improvement.
+This assessment uses the [pinned Vx source](https://github.com/vx-lang/Vx/tree/7cc3d2d95fb61f0b80d3b0bd1d8ff38b833f1c47).
+Unchecked items describe remaining Vextor work. They do not imply that Vx lacks the feature.
+Check existing APIs and backend support before proposing a language or library change.
 
-Vx's core work is inference-focused, so database-style needs are the contribution. Keep a running list here as the milestones expose gaps, and turn each into a short upstream proposal early so library work and language direction stay aligned.
+### Existing capabilities to adopt or validate
 
-- [ ] Atomics and reductions on device (counters, histograms, argmin/argmax across blocks).
-- [ ] Irregular and variable-length data: ragged arrays, offsets-plus-values layouts, strings.
-- [ ] Sorting, top-k and hash-table primitives as standard-library modules.
-- [ ] A columnar / Arrow-style buffer module alongside the existing `tensor`, `simd` and `vec` modules.
-- [ ] A stable C ABI export story, including versioning and error-return conventions.
-- [ ] Streaming and async transfer primitives (pinned memory, double buffering, events).
-- [ ] Seeded random number generation that gives reproducible results across backends.
-- [ ] Memory limits and out-of-memory behavior as a recoverable error rather than an abort.
-- [ ] Use the compiler's transfer-cost reasoning (it finds the cheapest legal route across declared bus edges) for a planner-style cost model of host-to-device movement.
-- [ ] For each gap: write the proposal, link the failing example, and note whether the core developer agrees.
+- [x] Use pointer validity, initialization, and copy non-overlap contracts in the CPU helpers. Use borrowed metric enums and require flat code generation. These unsafe contracts retain the C caller's allocation obligations.
+- [ ] Evaluate existing atomic types and lane reductions for GPU assignment and centroid accumulation. Check supported types, memory spaces, synchronization, and reduction scope. Validate cross-block counters, histograms, and argmin/argmax separately.
+- [ ] Evaluate `transfer_async`, its completion tokens, and `lanes::copy_async` for the GPU data path. Check host pinned-memory requirements, buffer lifetimes, completion, and double buffering on the selected backend.
+- [ ] Evaluate the seeded generators in `std::rand`, including `Rng` and `SplitMix64`. Define parallel stream assignment and validate CPU/GPU reproducibility. Preserve the current sampling baseline until any change has matched reference evidence.
+- [ ] Audit existing `String`, host `HashMap`/`HashSet`, and lane sorting before requesting replacements. Assess generic types, device support, sort scope, and top-k requirements independently.
+
+A lane is one participant in a parallel computation. A lane reduction combines the
+participants' values into one result, such as a sum or maximum. For k-means,
+lanes can compute partial distance sums and then combine them with `lanes::sum`.
+The participating group determines the scope. A local reduction does not automatically
+combine every GPU block's results. Cross-block aggregation needs another stage or
+suitable atomics. Floating-point reduction order also affects rounding.
+
+### Remaining requirements and candidate proposals
+
+- [ ] Investigate the nearest-index loop and variable-dimension offset proof gaps. Start from the reduced examples in `tests/contracts/gaps/`. Determine whether annotations or verifier improvements are needed before proposing changes.
+- [ ] Complete the SIMD capability audit in M5: native vector loads/stores, arithmetic, reductions, alignment, aliasing, and scalar tails. The current `std::simd` helpers alone do not establish an efficient complete kernel.
+- [ ] Identify missing device-wide reductions, sorting, top-k, or hash operations after the GPU capability audit. Keep local lane operations separate from whole-device requirements.
+- [ ] Define concrete ragged and offsets-plus-values workloads before proposing additional irregular-data support. Strings already exist. Assess device support and bounded storage separately.
+- [ ] Evaluate a columnar / Arrow-style buffer module for a concrete database workload. Specify ownership, validity, layout, and conversion costs. Keep this follow-up work separate from the current dense-vector path.
+- [ ] Document C ABI compatibility, versioning, error conventions, and upgrade checks. Basic C export already works through Vextor's versioned `v1` API. Separate Vextor's policy from guarantees supplied by the compiler.
+- [ ] Define recoverable allocation failure where the application needs it. Low-level `std::alloc` allocation functions return null, while `Vec` can panic on allocation failure. Vextor already checks explicit buffer budgets and returns adapter allocation errors. Broader collection/device recovery and total process-memory limits remain separate requirements.
+- [ ] Evaluate the existing transfer-cost reasoning as an application planner input. It selects legal routes across declared edges. Compare its estimates with measured transfer costs before using them for runtime planning.
+
+Prioritize the M4 proof gaps, M5 SIMD requirements, and M6 GPU data path.
+Keep broader database-library proposals in the follow-up backlog.
+For each confirmed gap, retain a small application example and an upstream regression check.
+Record the existing capability, missing behavior, proposed change, and maintainer feedback.
 
 ## Backends and portability
 

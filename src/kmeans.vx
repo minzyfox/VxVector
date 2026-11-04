@@ -4,6 +4,24 @@ import core::convert;
 import core::num;
 import core::ptr;
 
+enum DistanceMetric {
+  L2,
+  InnerProduct,
+  Cosine,
+}
+
+// The foreign caller supplies allocation sizes and disjoint work buffers.
+unsafe fn copy_vector(destination: *mut f32, source: *const f32, length: i64) -> void
+requires valid(destination, length)
+requires valid(source, length)
+requires initialized(source, length)
+requires !overlaps(destination, source, length)
+{
+  for i in 0i64..length {
+    unsafe { destination[i] = source[i]; }
+  }
+}
+
 fn greatest_common_divisor(left: i32, right: i32) -> i32 {
   let mut a = left;
   let mut b = right;
@@ -20,50 +38,64 @@ fn sample_row(position: i32, rows: i32, offset: i32, stride: i32) -> i32 {
   return (index % i64::from(rows)) as i32;
 }
 
-fn distance(data: *const f32, data_offset: i64, row: i32,
-  centers: *const f32, center_offset: i64,
-  center: i32, dims: i32, metric: i32) -> f32 {
-  let mut dot: f32 = 0.0;
-  let mut left_norm: f32 = 0.0;
-  let mut right_norm: f32 = 0.0;
-  let mut squared: f32 = 0.0;
-  for d in 0..dims {
-    let left = unsafe {
-      data[data_offset + i64::from(row) * i64::from(dims) + i64::from(d)]
-    };
-    let right = unsafe {
-      centers[center_offset + i64::from(center) * i64::from(dims) + i64::from(d)]
-    };
-    let difference = left - right;
-    squared += difference * difference;
-    dot += left * right;
-    left_norm += left * left;
-    right_norm += right * right;
+unsafe fn distance(left: *const f32, right: *const f32,
+dims: i32, metric: &DistanceMetric) -> f64
+requires valid(left, dims)
+requires valid(right, dims)
+requires initialized(left, dims)
+requires initialized(right, dims)
+{
+  match metric {
+    DistanceMetric::L2 => {
+      let mut squared: f64 = 0.0;
+      for d in 0..dims {
+        let difference = f64::from(unsafe { left[d] }) - f64::from(unsafe {
+          right[d]
+        });
+        squared += difference * difference;
+      }
+      return squared;
+    },
+    DistanceMetric::InnerProduct => {
+      let mut dot: f64 = 0.0;
+      for d in 0..dims {
+        dot += f64::from(unsafe { left[d] }) * f64::from(unsafe { right[d] });
+      }
+      return -dot;
+    },
+    DistanceMetric::Cosine => {
+      let mut dot: f64 = 0.0;
+      let mut left_norm: f64 = 0.0;
+      let mut right_norm: f64 = 0.0;
+      for d in 0..dims {
+        let left_wide = f64::from(unsafe { left[d] });
+        let right_wide = f64::from(unsafe { right[d] });
+        dot += left_wide * right_wide;
+        left_norm += left_wide * left_wide;
+        right_norm += right_wide * right_wide;
+      }
+      if left_norm == 0.0 && right_norm == 0.0 {
+        return 0.0;
+      }
+      if left_norm == 0.0 || right_norm == 0.0 {
+        return 1.0;
+      }
+      return 1.0 - dot / (left_norm * right_norm).sqrt();
+    },
   }
-  if metric == 0 {
-    return squared;
-  }
-  if metric == 1 {
-    return -dot;
-  }
-  if left_norm == 0.0 && right_norm == 0.0 {
-    return 0.0;
-  }
-  if left_norm == 0.0 || right_norm == 0.0 {
-    return 1.0;
-  }
-  return 1.0 - dot / (left_norm * right_norm).sqrt();
 }
 
 fn nearest(data: *const f32, data_offset: i64, row: i32,
-  centers: *const f32, center_offset: i64,
-  k: i32, dims: i32, metric: i32) -> i32 {
+centers: *const f32, center_offset: i64,
+k: i32, dims: i32, metric: &DistanceMetric) -> i32 {
+  let point = offset(data, data_offset + i64::from(row) * i64::from(dims));
   let mut best = 0;
-  let mut best_distance = distance(data, data_offset, row, centers, center_offset,
-  0, dims, metric);
+  let mut best_distance = unsafe {
+    distance(point, offset(centers, center_offset), dims, metric)
+  };
   for center in 1..k {
-    let candidate = distance(data, data_offset, row, centers, center_offset,
-    center, dims, metric);
+    let candidate = unsafe { distance(point,
+      offset(centers, center_offset + i64::from(center) * i64::from(dims)), dims, metric) };
     if candidate < best_distance {
       best = center;
       best_distance = candidate;
@@ -72,30 +104,29 @@ fn nearest(data: *const f32, data_offset: i64, row: i32,
   return best;
 }
 
-fn normalize(centers: *mut f32, center: i32, dims: i32) -> void {
-  let mut squared: f32 = 0.0;
+unsafe fn normalize(vector: *mut f32, dims: i32) -> void
+requires valid(vector, dims)
+requires initialized(vector, dims)
+{
+  let mut squared: f64 = 0.0;
   for d in 0..dims {
-    let value = unsafe {
-      centers[i64::from(center) * i64::from(dims) + i64::from(d)]
-    };
-    squared += value * value;
+    let wide = f64::from(unsafe { vector[d] });
+    squared += wide * wide;
   }
   if squared > 0.0 {
     let norm = squared.sqrt();
     for d in 0..dims {
-      let index = i64::from(center) * i64::from(dims) + i64::from(d);
-      unsafe { centers[index] = centers[index] / norm; }
+      unsafe { vector[d] = (f64::from(vector[d]) / norm) as f32; }
     }
   }
-  return;
 }
 
 fn train(data: *const f32, data_offset: i64, rows: i32, dims: i32,
-  k: i32, sampling_factor: i32, batch_size: i32,
-  iterations: i32, restarts: i32, metric: i32, spherical: i32,
-  seed: i32, output: *mut f32, output_offset: i64,
-  assignments: *mut i32, write_assignments: i32,
-  current: *mut f32, sums: *mut f32, counts: *mut i32) -> void {
+k: i32, sampling_factor: i32, batch_size: i32,
+iterations: i32, restarts: i32, metric: &DistanceMetric, spherical: i32,
+seed: i32, output: *mut f32, output_offset: i64,
+assignments: *mut i32, write_assignments: i32,
+current: *mut f32, sums: *mut f32, counts: *mut i32) -> i32 {
   let requested = i64::from(k) * i64::from(sampling_factor);
   let mut samples = rows;
   if requested < i64::from(rows) {
@@ -120,16 +151,12 @@ fn train(data: *const f32, data_offset: i64, rows: i32, dims: i32,
       let position = ((i64::from(center) * i64::from(samples) / i64::from(k)
       + i64::from(restart) * 104729) % i64::from(samples)) as i32;
       let row = sample_row(position, rows, offset, stride);
-      for d in 0..dims {
-        let value = unsafe {
-          data[data_offset + i64::from(row) * i64::from(dims) + i64::from(d)]
-        };
-        unsafe {
-          current[i64::from(center) * i64::from(dims) + i64::from(d)] = value;
-        }
-      }
+      unsafe { copy_vector(offset_mut(current, i64::from(center) * i64::from(dims)),
+        offset(data, data_offset + i64::from(row) * i64::from(dims)), i64::from(dims)); }
       if spherical != 0 {
-        normalize(current, center, dims);
+        unsafe {
+          normalize(offset_mut(current, i64::from(center) * i64::from(dims)), dims);
+        }
       }
     }
 
@@ -159,7 +186,11 @@ fn train(data: *const f32, data_offset: i64, rows: i32, dims: i32,
             let value = unsafe {
               data[data_offset + i64::from(row) * i64::from(dims) + i64::from(d)]
             };
-            unsafe { sums[index] = sums[index] + value; }
+            let total = unsafe { sums[index] + value };
+            if !total.is_finite() {
+              return 1;
+            }
+            unsafe { sums[index] = total; }
           }
         }
         batch_start = batch_end;
@@ -170,14 +201,8 @@ fn train(data: *const f32, data_offset: i64, rows: i32, dims: i32,
         if count == 0 {
           let position = ((i64::from(center) + i64::from(iteration)) % i64::from(samples)) as i32;
           let row = sample_row(position, rows, offset, stride);
-          for d in 0..dims {
-            let value = unsafe {
-              data[data_offset + i64::from(row) * i64::from(dims) + i64::from(d)]
-            };
-            unsafe {
-              current[i64::from(center) * i64::from(dims) + i64::from(d)] = value;
-            }
-          }
+          unsafe { copy_vector(offset_mut(current, i64::from(center) * i64::from(dims)),
+            offset(data, data_offset + i64::from(row) * i64::from(dims)), i64::from(dims)); }
         } else {
           for d in 0..dims {
             let index = i64::from(center) * i64::from(dims) + i64::from(d);
@@ -185,7 +210,9 @@ fn train(data: *const f32, data_offset: i64, rows: i32, dims: i32,
           }
         }
         if spherical != 0 {
-          normalize(current, center, dims);
+          unsafe {
+            normalize(offset_mut(current, i64::from(center) * i64::from(dims)), dims);
+          }
         }
       }
     }
@@ -195,20 +222,14 @@ fn train(data: *const f32, data_offset: i64, rows: i32, dims: i32,
       let row = sample_row(position, rows, offset, stride);
       let center = nearest(data, data_offset, row, current as *const f32, 0,
       k, dims, metric);
-      objective += f64::from(distance(data, data_offset, row,
-      current as *const f32, 0,
-      center, dims, metric));
+      objective += unsafe { distance(offset(data, data_offset + i64::from(row) * i64::from(dims)),
+        offset(current as *const f32, i64::from(center) * i64::from(dims)), dims, metric) };
     }
     if !has_best || objective < best_objective {
       has_best = true;
       best_objective = objective;
-      for center in 0..k {
-        for d in 0..dims {
-          let index = i64::from(center) * i64::from(dims) + i64::from(d);
-          let value = unsafe { current[index] };
-          unsafe { output[output_offset + index] = value; }
-        }
-      }
+      unsafe { copy_vector(offset_mut(output, output_offset), current as *const f32,
+        i64::from(k) * i64::from(dims)); }
     }
   }
 
@@ -219,20 +240,20 @@ fn train(data: *const f32, data_offset: i64, rows: i32, dims: i32,
       unsafe { assignments[row] = center; }
     }
   }
-  return;
+  return 0;
 }
 
 // metric: 0=l2, 1=inner product, 2=cosine. root_count=0 means flat clustering.
 // nodes contains the zero root, optional root centroids, then leaf centroids.
-// Returns 0 on success and 1 for an invalid shape or option.
+// Returns 1 for invalid arguments or float32 centroid-sum overflow.
 pub fn vextor_kmeans_v1(points: *const f32, rows: i32, dims: i32,
-  root_count: i32, leaf_count: i32,
-  sampling_factor: i32, batch_size: i32,
-  iterations: i32, restarts: i32, metric: i32,
-  spherical: i32, seed: i32,
-  nodes: *mut f32, parents: *mut i32,
-  assignments: *mut i32, current: *mut f32,
-  sums: *mut f32, counts: *mut i32) -> i32 {
+root_count: i32, leaf_count: i32,
+sampling_factor: i32, batch_size: i32,
+iterations: i32, restarts: i32, metric: i32,
+spherical: i32, seed: i32,
+nodes: *mut f32, parents: *mut i32,
+assignments: *mut i32, current: *mut f32,
+sums: *mut f32, counts: *mut i32) -> i32 {
   if points == null<f32>() || nodes == null_mut<f32>() ||
   parents == null_mut<i32>() || assignments == null_mut<i32>() ||
   current == null_mut<f32>() || sums == null_mut<f32>() ||
@@ -259,16 +280,33 @@ pub fn vextor_kmeans_v1(points: *const f32, rows: i32, dims: i32,
   }
   unsafe { parents[0] = -1; }
 
+  let distance_metric = match metric {
+    0 => {
+      DistanceMetric::L2
+    },
+    1 => {
+      DistanceMetric::InnerProduct
+    },
+    _ => {
+      DistanceMetric::Cosine
+    },
+  };
   let leaf_offset = i64::from(1 + root_count) * i64::from(dims);
-  train(points, 0, rows, dims, leaf_count, sampling_factor, batch_size,
-  iterations, restarts, metric, spherical, seed, nodes, leaf_offset,
+  let leaf_status = train(points, 0, rows, dims, leaf_count, sampling_factor, batch_size,
+  iterations, restarts, &distance_metric, spherical, seed, nodes, leaf_offset,
   assignments, 1, current, sums, counts);
+  if leaf_status != 0 {
+    return leaf_status;
+  }
 
   if root_count > 0 {
-    train(nodes as *const f32, leaf_offset, leaf_count, dims, root_count,
-    sampling_factor, batch_size, iterations, restarts, metric, spherical,
+    let root_status = train(nodes as *const f32, leaf_offset, leaf_count, dims, root_count,
+    sampling_factor, batch_size, iterations, restarts, &distance_metric, spherical,
     (seed % 2147483646) + 1, nodes, i64::from(dims),
     assignments, 0, current, sums, counts);
+    if root_status != 0 {
+      return root_status;
+    }
     for root in 0..root_count {
       unsafe { parents[1 + root] = 0; }
     }
@@ -277,7 +315,7 @@ pub fn vextor_kmeans_v1(points: *const f32, rows: i32, dims: i32,
     let mut parent = 0;
     if root_count > 0 {
       let center = nearest(nodes as *const f32, leaf_offset, leaf,
-      nodes as *const f32, i64::from(dims), root_count, dims, metric);
+      nodes as *const f32, i64::from(dims), root_count, dims, &distance_metric);
       parent = 1 + center;
     }
     unsafe { parents[1 + root_count + leaf] = parent; }

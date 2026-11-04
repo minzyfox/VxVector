@@ -167,6 +167,39 @@ class KmeansTests(unittest.TestCase):
                 self.assertNotEqual(labels[0], labels[2])
                 self.assertEqual(sorted(node[0] for node in nodes[1:]), [0.5, 10.5])
 
+    def test_large_and_tiny_spherical_vectors_keep_their_direction(self):
+        for magnitude in (1e-30, 1e30):
+            for metric in range(3):
+                with self.subTest(magnitude=magnitude, metric=metric):
+                    points = ([[magnitude, magnitude]] * 2 if metric == 0 else
+                              [[magnitude, magnitude], [-magnitude, -magnitude]])
+                    status, nodes, _, labels = self.run_kmeans(
+                        points, leaves=1 if metric == 0 else 2, metric=metric, spherical=True, seed=0
+                    )
+                    self.assertEqual(status, 0)
+                    for node in nodes[1:]:
+                        self.assertAlmostEqual(sum(x*x for x in node), 1.0, places=5)
+                    if metric != 0:
+                        self.assertNotEqual(labels[0], labels[1])
+                    for point, label in zip(points, labels):
+                        self.assertGreater(sum(x*y for x, y in zip(point, nodes[1+label])), 0)
+
+    def test_cosine_large_vectors_have_distinct_assignments(self):
+        status, _, _, labels = self.run_kmeans(
+            [[1e30, 1e30], [-1e30, -1e30]], leaves=2,
+            metric=2, spherical=True, seed=0, iterations=1
+        )
+        self.assertEqual(status, 0)
+        self.assertNotEqual(labels[0], labels[1])
+
+    def test_centroid_sum_overflow_returns_an_error(self):
+        for metric in range(3):
+            with self.subTest(metric=metric):
+                status, _, _, _ = self.run_kmeans(
+                    [[3e38, 3e38]] * 4, leaves=1, metric=metric, spherical=False
+                )
+                self.assertEqual(status, 1)
+
     def test_invalid_shapes_and_nonfinite_input(self):
         self.assertEqual(self.run_kmeans([[1], [2]], leaves=3)[0], 1)
         self.assertEqual(self.run_kmeans([[1], [2]], leaves=1, metric=9)[0], 1)

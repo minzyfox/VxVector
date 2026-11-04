@@ -11,11 +11,19 @@ compose() {
   fi
 }
 
-compose exec -T postgres psql -X -v ON_ERROR_STOP=1 -U vextor -d vextor \
-  < "$project_root/tests/postgres_image.sql"
-compose exec -T postgres sh -c 'cc --version && clang --version && cargo --version && rustc --version && test -f "$(pg_config --includedir-server)/postgres.h"'
+postgres_exec() {
+  if [[ -n "${VEXTOR_POSTGRES_CONTAINER:-}" ]]; then
+    docker exec -i "$VEXTOR_POSTGRES_CONTAINER" "$@"
+  else
+    compose exec -T postgres "$@"
+  fi
+}
 
-compose exec -T postgres sh -c 'cc -I "$(pg_config --includedir-server)" -x c -fsyntax-only -' <<'C'
+postgres_exec psql -X -v ON_ERROR_STOP=1 -U vextor -d vextor \
+  < "$project_root/tests/postgres_image.sql"
+postgres_exec sh -c 'cc --version && clang --version && cargo --version && rustc --version && test -f "$(pg_config --includedir-server)/postgres.h"'
+
+postgres_exec sh -c 'cc -I "$(pg_config --includedir-server)" -x c -fsyntax-only -' <<'C'
 #include "postgres.h"
 #include "fmgr.h"
 PG_MODULE_MAGIC;

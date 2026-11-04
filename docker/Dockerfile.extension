@@ -12,5 +12,6 @@ RUN mkdir -p /opt/vextor \
 FROM vextor-postgres:17-dev AS runtime
 COPY --from=builder /opt/vextor/vextor-worker /opt/vextor/libvextor_kmeans.so /usr/local/libexec/vextor/
 COPY build/linux/libpg_vextor.so /usr/lib/postgresql/17/lib/pg_vextor.so
+COPY build/linux/vx-build-info.json vx-revision.txt /usr/local/libexec/vextor/
 COPY pg_vextor/pg_vextor.control pg_vextor/sql/pg_vextor--0.1.0.sql /usr/share/postgresql/17/extension/
 COPY docker/020-vextor.sql /docker-entrypoint-initdb.d/

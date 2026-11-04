@@ -10,6 +10,11 @@ pg_vextor/target/
 !include/
 !include/*.h
 !build/
+build/*
 !build/linux/
+build/linux/*
 !build/linux/kmeans.o
 !build/linux/libpg_vextor.so
+
+!vx-revision.txt
+!build/linux/vx-build-info.json

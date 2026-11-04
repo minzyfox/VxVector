@@ -180,6 +180,34 @@ END $$;
 SET LOCAL statement_timeout = '0';
 SET LOCAL vextor.worker_path = DEFAULT;
 
+-- Large finite vectors must retain a unit spherical centroid.
+CREATE TABLE vextor_m3_smoke.large_source(features vector(2));
+INSERT INTO vextor_m3_smoke.large_source SELECT '[1e30,1e30]'::vector FROM generate_series(1,2);
+SELECT vextor.create_vector_index('vextor_m3_smoke.large_source','features',ARRAY[1],
+    spherical_centroids=>true,skip_index_build=>true,centroid_table=>'large_centroids');
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM vextor_m3_smoke.large_centroids
+               WHERE id > 0 AND abs((vector <#> vector) + 1) > 1e-5) THEN
+        RAISE EXCEPTION 'Extreme spherical centroid lost its unit norm';
+    END IF;
+END $$;
+
+-- Finite source vectors can overflow float32 centroid sums.
+CREATE TABLE vextor_m3_smoke.overflow_source(features vector(2));
+INSERT INTO vextor_m3_smoke.overflow_source SELECT '[3e38,3e38]'::vector FROM generate_series(1,4);
+SELECT vextor_m3_smoke.expect_error(
+    $$SELECT vextor.create_vector_index('vextor_m3_smoke.overflow_source','features',ARRAY[1],
+      centroid_table=>'overflow_centroids',index_name=>'overflow_idx')$$,
+    'rejected the collected sample');
+DO $$
+BEGIN
+    IF to_regclass('vextor_m3_smoke.overflow_centroids') IS NOT NULL OR
+       to_regclass('vextor_m3_smoke.overflow_idx') IS NOT NULL THEN
+        RAISE EXCEPTION 'Numerical overflow left partial outputs';
+    END IF;
+END $$;
+
 -- pgvector types and VectorChord operator classes need not share a schema.
 DROP INDEX vextor_m3_smoke.tree_idx;
 CREATE SCHEMA vextor_vector_types;
