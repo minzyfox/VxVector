@@ -1,0 +1,30 @@
+import core::convert;
+
+fn nearest_index(k: i32, selected: i32) -> i32
+requires k > 0 && selected >= 0 && selected < k
+ensures return >= 0 && return < k {
+  let mut best: i32 = 0;
+  let mut center: i32 = 1;
+  while center < k
+  invariant best >= 0 && best < k
+  invariant center >= 1 && center <= k {
+    if center == selected {
+      best = center;
+    }
+    center += 1;
+  }
+  return best;
+}
+
+fn positive_count(count: i32) -> i32
+requires count >= 0
+ensures return > 0 {
+  if count == 0 {
+    return 1;
+  }
+  return count;
+}
+
+fn main() -> i32 {
+  return nearest_index(4, 2);
+}

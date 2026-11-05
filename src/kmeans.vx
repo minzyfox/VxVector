@@ -87,13 +87,16 @@ requires initialized(right, dims)
 
 fn nearest(data: *const f32, data_offset: i64, row: i32,
 centers: *const f32, center_offset: i64,
-k: i32, dims: i32, metric: &DistanceMetric) -> i32 {
+k: i32, dims: i32, metric: &DistanceMetric) -> i32
+requires k > 0
+ensures return >= 0 && return < k
+{
   let point = offset(data, data_offset + i64::from(row) * i64::from(dims));
   let mut best = 0;
   let mut best_distance = unsafe {
     distance(point, offset(centers, center_offset), dims, metric)
   };
-  for center in 1..k {
+  for center in 1..k invariant best >= 0 && best < k {
     let candidate = unsafe { distance(point,
       offset(centers, center_offset + i64::from(center) * i64::from(dims)), dims, metric) };
     if candidate < best_distance {
@@ -121,12 +124,50 @@ requires initialized(vector, dims)
   }
 }
 
+// i32 dimensions keep the widened row-major arithmetic within i64.
+fn buffer_index(row: i64, rows: i64, dims: i64, d: i64) -> i64
+requires rows > 0 && rows <= 2147483647 && dims > 0 && dims <= 2147483647
+requires row >= 0 && row < rows && d >= 0 && d < dims
+ensures return >= 0 && return < rows * dims
+{
+  return row * dims + d;
+}
+
+// The foreign caller owns initialized counts[k] and sums[k * dims] buffers.
+unsafe fn accumulate_point(point: *const f32, sums: *mut f32, counts: *mut i32,
+center: i32, k: i32, dims: i32) -> i32
+requires k > 0
+requires dims > 0
+requires center >= 0
+requires center < k
+requires valid(point, dims)
+requires initialized(point, dims)
+requires valid(counts, k)
+requires initialized(counts, k)
+requires valid(sums, (k as i64) * (dims as i64))
+requires initialized(sums, (k as i64) * (dims as i64))
+{
+  unsafe { counts[center] = counts[center] + 1; }
+  for d in 0..dims {
+    let index = buffer_index(i64::from(center), i64::from(k), i64::from(dims), i64::from(d));
+    let value = unsafe { point[d] };
+    let total = unsafe { sums[index] + value };
+    if !total.is_finite() {
+      return 1;
+    }
+    unsafe { sums[index] = total; }
+  }
+  return 0;
+}
+
 fn train(data: *const f32, data_offset: i64, rows: i32, dims: i32,
 k: i32, sampling_factor: i32, batch_size: i32,
 iterations: i32, restarts: i32, metric: &DistanceMetric, spherical: i32,
 seed: i32, output: *mut f32, output_offset: i64,
 assignments: *mut i32, write_assignments: i32,
-current: *mut f32, sums: *mut f32, counts: *mut i32) -> i32 {
+current: *mut f32, sums: *mut f32, counts: *mut i32) -> i32
+requires k > 0 && dims > 0
+{
   let requested = i64::from(k) * i64::from(sampling_factor);
   let mut samples = rows;
   if requested < i64::from(rows) {
@@ -165,7 +206,7 @@ current: *mut f32, sums: *mut f32, counts: *mut i32) -> i32 {
         unsafe { counts[center] = 0; }
         for d in 0..dims {
           unsafe {
-            sums[i64::from(center) * i64::from(dims) + i64::from(d)] = 0.0;
+            sums[buffer_index(i64::from(center), i64::from(k), i64::from(dims), i64::from(d))] = 0.0;
           }
         }
       }
@@ -180,17 +221,12 @@ current: *mut f32, sums: *mut f32, counts: *mut i32) -> i32 {
           let row = sample_row(position, rows, offset, stride);
           let center = nearest(data, data_offset, row, current as *const f32, 0,
           k, dims, metric);
-          unsafe { counts[center] = counts[center] + 1; }
-          for d in 0..dims {
-            let index = i64::from(center) * i64::from(dims) + i64::from(d);
-            let value = unsafe {
-              data[data_offset + i64::from(row) * i64::from(dims) + i64::from(d)]
-            };
-            let total = unsafe { sums[index] + value };
-            if !total.is_finite() {
-              return 1;
-            }
-            unsafe { sums[index] = total; }
+          let point = offset(data, data_offset + i64::from(row) * i64::from(dims));
+          let accumulation = unsafe {
+            accumulate_point(point, sums, counts, center, k, dims)
+          };
+          if accumulation != 0 {
+            return accumulation;
           }
         }
         batch_start = batch_end;
@@ -205,7 +241,7 @@ current: *mut f32, sums: *mut f32, counts: *mut i32) -> i32 {
             offset(data, data_offset + i64::from(row) * i64::from(dims)), i64::from(dims)); }
         } else {
           for d in 0..dims {
-            let index = i64::from(center) * i64::from(dims) + i64::from(d);
+            let index = buffer_index(i64::from(center), i64::from(k), i64::from(dims), i64::from(d));
             unsafe { current[index] = sums[index] / (count as f32); }
           }
         }
@@ -254,11 +290,14 @@ spherical: i32, seed: i32,
 nodes: *mut f32, parents: *mut i32,
 assignments: *mut i32, current: *mut f32,
 sums: *mut f32, counts: *mut i32) -> i32 {
+  if leaf_count <= 0 || dims <= 0 {
+    return 1;
+  }
   if points == null<f32>() || nodes == null_mut<f32>() ||
   parents == null_mut<i32>() || assignments == null_mut<i32>() ||
   current == null_mut<f32>() || sums == null_mut<f32>() ||
   counts == null_mut<i32>() ||
-  rows <= 0 || dims <= 0 || leaf_count <= 0 || leaf_count > rows ||
+  rows <= 0 || leaf_count > rows ||
   root_count < 0 || root_count > leaf_count ||
   i64::from(root_count) + i64::from(leaf_count) >= 2147483647 ||
   sampling_factor <= 0 || batch_size <= 0 || iterations <= 0 ||

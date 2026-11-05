@@ -1,0 +1,9 @@
+fn buffer_index(row: i64, dims: i64, d: i64) -> i64
+requires row >= 0 && row < 2147483647 && dims > 0 && dims <= 2147483647 && d >= 0 && d < dims
+ensures return >= 0 && return < 4611686014132420609 {
+  return row * dims + d;
+}
+
+fn main() -> i32 {
+  return 0;
+}

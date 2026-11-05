@@ -1,0 +1,39 @@
+   Compiling vxc v0.0.3 (/Users/gagan/dev/Vx)
+warning: vxc@0.0.3: Failed to compile matmul_4x4 with coremlc
+warning: vxc@0.0.3: Failed to compile affine_4 with coremlc
+warning: vxc@0.0.3: Failed to compile matmul_512x512_fp16 with coremlc
+warning: vxc@0.0.3: Failed to compile matmul_1024x1024_fp16 with coremlc
+    Finished `test` profile [optimized + debuginfo] target(s) in 49.91s
+     Running tests/integration_test.rs (target/debug/deps/integration_test-55fcd3437c455499)
+
+running 1 test
+
+thread 'integration_test::ane_device_test::the_dispatcher_reports_the_device_coreml_chose' (9174920) panicked at tests/integration_test/ane_device_test.rs:174:5:
+the f16 512 primitive is the one CoreML puts on the Neural Engine, and the dispatcher must say so from the plan rather than from the route:
+[JIT] Translating to LLVM IR...
+[JIT] Optimizing LLVM IR (-O0)...
+[JIT] Compiling to native object (-O0)...
+[JIT] Linking native executable...
+[JIT] Executing native binary...
+1024
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 3 args
+[Vx Dispatcher] Recognised GEMM 512x512x512 f16 -> buffer
+[Vx Dispatcher] no matmul_512x512_fp16.mlmodelc on the model search path
+[Vx Dispatcher] Scanning 3 args:
+  Arg 0: tag=133120
+  Arg 1: tag=133120
+  Arg 2: tag=133120
+[Vx Dispatcher] Found 3 MemRefs
+[Vx Dispatcher] Hardware backend unsupported for vx_npu_kernel_0. Falling back to CPU libffi dispatch on 1 worker!
+
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test integration_test::ane_device_test::the_dispatcher_reports_the_device_coreml_chose ... FAILED
+
+failures:
+
+failures:
+    integration_test::ane_device_test::the_dispatcher_reports_the_device_coreml_chose
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 493 filtered out; finished in 5.36s
+
+error: test failed, to rerun pass `-p vxc --test integration_test`

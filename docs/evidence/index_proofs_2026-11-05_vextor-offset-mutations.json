@@ -1,0 +1,22 @@
+[
+  {
+    "mutation": "linear_solver_logic",
+    "result": "caught",
+    "diagnostics": "Warning in /Users/gagan/dev/Vx/tests/frontend/pass/formal_verification/variable_dimension_buffer_index.vx: SMT solver error: z3 failed: (error \"line 14 column 187: logic does not support nonlinear arithmetic\")\n(error \"line 15 column 133: logic does not support nonlinear arithmetic\")\nsat\nError[E8001] at /Users/gagan/dev/Vx/tests/frontend/pass/formal_verification/variable_dimension_buffer_index.vx:9:3: Function 'buffer_index' cannot prove postcondition (ensures) at compile time\nSemantic check failed on '/Users/gagan/dev/Vx/tests/frontend/pass/formal_verification/variable_dimension_buffer_index.vx': 1 error(s) emitted\n"
+  },
+  {
+    "mutation": "accept_unknown",
+    "result": "caught",
+    "assertion": "solver_result(\"unknown\").is_err()"
+  },
+  {
+    "mutation": "accept_error",
+    "result": "caught",
+    "assertion": "unsupported arithmetic"
+  },
+  {
+    "mutation": "missing_widening_value_contract",
+    "result": "caught",
+    "diagnostics": "Error[E8006] at /Users/gagan/dev/Vx/tests/frontend/pass/formal_verification/variable_dimension_buffer_index.vx:14:10: this call to 'buffer_index' may not meet its precondition `(((rows > 0) && (rows <= 2147483647)) && (dims > 0)) && (dims <= 2147483647)`: the compiler cannot prove it from what is known here\nError[E8006] at /Users/gagan/dev/Vx/tests/frontend/pass/formal_verification/variable_dimension_buffer_index.vx:14:10: this call to 'buffer_index' may not meet its precondition `(((row >= 0) && (row < rows)) && (d >= 0)) && (d < dims)`: the compiler cannot prove it from what is known here\nSemantic check failed on '/Users/gagan/dev/Vx/tests/frontend/pass/formal_verification/variable_dimension_buffer_index.vx': 2 error(s) emitted\n"
+  }
+]

@@ -38,8 +38,9 @@ Vextor to live:
 ```sh
 git clone https://github.com/minzyfox/vextor.git
 cd vextor
-git clone https://github.com/vx-lang/Vx.git ../Vx
+git clone https://github.com/minzyfox/Vx.git ../Vx
 export VX_ROOT="$(cd ../Vx && pwd)"
+git -C "$VX_ROOT" fetch origin "$(cat vx-revision.txt)"
 git -C "$VX_ROOT" checkout --detach "$(cat vx-revision.txt)"
 cp .env.example .env
 ```
@@ -50,7 +51,8 @@ If you already have both checkouts, set `VX_ROOT` to a checkout at the exact
 commit in [vx-revision.txt](vx-revision.txt). Use a separate checkout if your
 existing Vx tree contains work you want to keep.
 
-The current pin is `7cc3d2d95fb61f0b80d3b0bd1d8ff38b833f1c47`.
+The current pin is `c9612a1f1c8a2819258b159774a615f9aca298a7`.
+It adds CPU proof fixes on top of main `ded61615`; see [the proof update](docs/m4_index_proofs_2026-11-05.md).
 The scripts default to `../../Vx` when `VX_ROOT` is unset. The fresh-checkout
 example overrides that default with its adjacent `../Vx` directory.
 
@@ -342,7 +344,7 @@ name, set `VEXTOR_POSTGRES_CONTAINER` to its PostgreSQL container name.
 
 This step builds a library for your host operating system, separate from the Linux
 worker inside Docker. Install a C/Clang compiler, Rust, LLVM/MLIR 22, and Z3 using
-the [pinned Vx build instructions](https://github.com/vx-lang/Vx/tree/7cc3d2d95fb61f0b80d3b0bd1d8ff38b833f1c47#quickstart).
+the [pinned Vx build instructions](https://github.com/minzyfox/Vx/tree/c9612a1f1c8a2819258b159774a615f9aca298a7#quickstart).
 Use LLVM major version 22 even if a newer version is installed.
 
 Set `VX_ROOT` to your pinned Vx checkout. It is already set if you followed the
@@ -428,9 +430,9 @@ build/correctness-venv/bin/python -B scripts/check_kernel_codegen.py
 ```
 
 These check helper contracts, generated pointer/alias information, and mutations
-that must fail at specific assertions. The contract harness also records two known
-proof gaps: the nearest-index loop and variable-dimension offsets. Expected diagnostics
-for these negative cases do not mean the harness failed.
+that must fail at specific assertions. The nearest-index loop and variable-dimension
+offset examples now pass. Kernel mutations check the result bound at the accumulation
+caller and reject invalid buffer offsets.
 These checks do not establish a proof of the complete kernel.
 
 The [latest upgraded-worker results](docs/evidence/vx_main_test_summary_2026-11-04.json)

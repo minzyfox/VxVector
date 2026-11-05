@@ -1,0 +1,4 @@
+{"case": "one_branch_is_invalid", "result": "caught", "expected_diagnostic_removed": "E8001"}
+{"case": "an_assignment_changes_the_condition", "result": "caught", "expected_diagnostic_removed": "E8001"}
+{"case": "a_later_pass_is_invalid", "result": "caught", "expected_diagnostic_removed": "E8009"}
+{"case": "index_past_the_buffer", "result": "caught", "expected_diagnostic_removed": "E8001"}
