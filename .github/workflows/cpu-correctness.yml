@@ -1,0 +1,92 @@
+name: CPU correctness
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cpu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      VX_ROOT: ${{ github.workspace }}/Vx
+      VEXTOR_POSTGRES_CONTAINER: vextor-postgres-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: vextor
+      - name: Read the Vx pin
+        id: vx
+        run: echo "revision=$(cat vextor/vx-revision.txt)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: vx-lang/Vx
+          ref: ${{ steps.vx.outputs.revision }}
+          path: Vx
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Build the CPU compiler and kernel
+        working-directory: vextor
+        run: |
+          docker build -f "$VX_ROOT/docker/Dockerfile.build" -t vx-build:llvm22 "$VX_ROOT"
+          ./scripts/build_linux_worker.sh
+          cc -std=c11 -Wall -Wextra -Werror -fPIC -I include -c src/data_path.c -o build/data_path.o
+          cc -shared -Wl,--no-undefined build/linux/kmeans.o build/data_path.o -lm -o build/libvextor_kmeans.so
+      - name: Check kernel code and contract examples
+        working-directory: vextor
+        run: |
+          set -euo pipefail
+          docker exec vextor-vx-build mkdir -p /tmp/vextor-contracts/scripts /tmp/vextor-contracts/tests /tmp/vextor-contracts/src
+          docker cp scripts/check_contracts.py vextor-vx-build:/tmp/vextor-contracts/scripts/
+          docker cp scripts/check_kernel_codegen.py vextor-vx-build:/tmp/vextor-contracts/scripts/
+          docker cp src/kmeans.vx vextor-vx-build:/tmp/vextor-contracts/src/
+          docker cp tests/contracts vextor-vx-build:/tmp/vextor-contracts/tests/
+          vx_source="$(cat build/linux/vx-source-path.txt)"
+          docker exec -w "$vx_source" vextor-vx-build bash -lc 'source config.local; python3 -B /tmp/vextor-contracts/scripts/check_contracts.py --vx-root "$PWD"' | tee build/contracts.log
+          docker exec -w "$vx_source" vextor-vx-build bash -lc 'source config.local; python3 -B /tmp/vextor-contracts/scripts/check_kernel_codegen.py --vx-root "$PWD"' | tee build/kernel-codegen.log
+      - name: Install correctness dependencies
+        working-directory: vextor
+        run: |
+          python -m venv build/correctness-venv
+          build/correctness-venv/bin/python -m pip install -r tests/requirements-correctness.txt
+      - name: Download public datasets
+        working-directory: vextor
+        run: |
+          mkdir -p build/datasets
+          curl --fail --location --retry 3 https://ann-benchmarks.com/glove-25-angular.hdf5 -o build/datasets/glove-25-angular.hdf5
+          curl --fail --location --retry 3 https://ann-benchmarks.com/sift-128-euclidean.hdf5 -o build/datasets/sift-128-euclidean.hdf5
+          sha256sum --check tests/datasets.sha256
+      - name: Build and start PostgreSQL
+        working-directory: vextor
+        run: |
+          ./scripts/build_postgres_image.sh
+          ./scripts/build_extension.sh
+          export VEXTOR_POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+          docker compose up -d --no-build --wait
+      - name: Check native CPU and PostgreSQL behavior
+        working-directory: vextor
+        run: |
+          set -o pipefail
+          VEXTOR_CHECK_POSTGRES=1 bash scripts/check_cpu.sh 2>&1 | tee build/cpu-correctness.log
+      - name: Preserve evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-correctness
+          path: |
+            vextor/build/*.log
+            vextor/build/linux/*.log
+            vextor/build/linux/vx-revision.txt
+            vextor/build/linux/vx-build-info.json
+      - name: Stop PostgreSQL
+        if: always()
+        working-directory: vextor
+        env:
+          VEXTOR_POSTGRES_PASSWORD: unused-for-shutdown
+        run: docker compose down

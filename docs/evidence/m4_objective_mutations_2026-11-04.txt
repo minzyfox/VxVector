@@ -1,0 +1,3 @@
+farthest_centroid: failed at intended assertion
+wrong_ip_cost: failed at intended assertion
+disabled_quality_gate: failed at intended assertion

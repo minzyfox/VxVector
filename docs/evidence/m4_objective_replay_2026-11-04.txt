@@ -1,0 +1,28 @@
+The database transaction completed with 24 centroid sets and 3,072 recall queries.
+The initial per-line parser failed on multiline json_agg output. After correcting
+parse_captures and adding a focused regression test, the following command scored
+the saved capture. Output is m4_objectives_2026-11-04.jsonl. Gates were unchanged.
+Run from the repository root with the documented datasets installed:
+
+build/correctness-venv/bin/python -B - <<'PYTHON'
+import json
+from pathlib import Path
+import sys
+sys.path.insert(0, 'scripts')
+from check_centroid_capture import parse_captures
+from check_real_recall import load, check_results
+from objective_comparison import compare_captures
+text = Path('docs/evidence/m4_objective_capture_2026-11-04.txt').read_text().split('Traceback (most recent call last):')[0]
+captures = parse_captures(text)
+records = [json.loads(line.split('REAL_RESULT ',1)[1]) for line in text.splitlines() if 'REAL_RESULT ' in line]
+check_results(records, [0,17], 32)
+cases = {}
+for dataset, metrics in [('glove-25-angular',['cos','ip']),('sift-128-euclidean',['l2'])]:
+    points,_,_ = load(Path('build/datasets')/(dataset+'.hdf5'),8192,32,dataset.startswith('glove'))
+    for metric in metrics:
+        for roots in (0,4):
+            for seed in (0,17):
+                cases[f'{dataset}_{metric}_{roots}_{seed}'] = dict(dataset=dataset,metric=metric,roots=roots,seed=seed,points=points)
+print(json.dumps(dict(objectives=compare_captures(captures,cases))))
+print(json.dumps(dict(result='passed',builds=24,recall_queries=len(records),replayed_saved_capture=True)))
+PYTHON

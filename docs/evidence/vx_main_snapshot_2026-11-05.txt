@@ -1,0 +1,1 @@
+Snapshot check passed: concurrent inserts and updates were excluded; centroids matched the original 64 rows.

@@ -1,0 +1,28 @@
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:94:5: a call in `unsafe` code trusts `initialized(left, dims)` of `distance`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:94:5: a call in `unsafe` code trusts `initialized(right, dims)` of `distance`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:94:5: a call in `unsafe` code trusts `valid(left, dims)` of `distance`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:94:5: a call in `unsafe` code trusts `valid(right, dims)` of `distance`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:97:30: a call in `unsafe` code trusts `initialized(left, dims)` of `distance`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:97:30: a call in `unsafe` code trusts `initialized(right, dims)` of `distance`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:97:30: a call in `unsafe` code trusts `valid(left, dims)` of `distance`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:97:30: a call in `unsafe` code trusts `valid(right, dims)` of `distance`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:154:16: a call in `unsafe` code trusts `!overlaps(destination, source, length)` of `copy_vector`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:154:16: a call in `unsafe` code trusts `initialized(source, length)` of `copy_vector`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:154:16: a call in `unsafe` code trusts `valid(destination, length)` of `copy_vector`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:154:16: a call in `unsafe` code trusts `valid(source, length)` of `copy_vector`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:158:11: a call in `unsafe` code trusts `initialized(vector, dims)` of `normalize`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:158:11: a call in `unsafe` code trusts `valid(vector, dims)` of `normalize`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:204:20: a call in `unsafe` code trusts `!overlaps(destination, source, length)` of `copy_vector`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:204:20: a call in `unsafe` code trusts `initialized(source, length)` of `copy_vector`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:204:20: a call in `unsafe` code trusts `valid(destination, length)` of `copy_vector`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:204:20: a call in `unsafe` code trusts `valid(source, length)` of `copy_vector`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:214:13: a call in `unsafe` code trusts `initialized(vector, dims)` of `normalize`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:214:13: a call in `unsafe` code trusts `valid(vector, dims)` of `normalize`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:225:29: a call in `unsafe` code trusts `initialized(left, dims)` of `distance`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:225:29: a call in `unsafe` code trusts `initialized(right, dims)` of `distance`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:225:29: a call in `unsafe` code trusts `valid(left, dims)` of `distance`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:225:29: a call in `unsafe` code trusts `valid(right, dims)` of `distance`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:231:16: a call in `unsafe` code trusts `!overlaps(destination, source, length)` of `copy_vector`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:231:16: a call in `unsafe` code trusts `initialized(source, length)` of `copy_vector`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:231:16: a call in `unsafe` code trusts `valid(destination, length)` of `copy_vector`, which the compiler cannot prove
+/Users/gagan/dev/vx-projects/vextor/src/kmeans.vx:231:16: a call in `unsafe` code trusts `valid(source, length)` of `copy_vector`, which the compiler cannot prove

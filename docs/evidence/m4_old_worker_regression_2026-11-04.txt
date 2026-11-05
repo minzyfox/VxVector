@@ -1,0 +1,146 @@
+CREATE EXTENSION
+NOTICE:  extension "pg_vextor" already exists, skipping
+BEGIN
+CREATE SCHEMA
+CREATE TABLE
+INSERT 0 64
+CREATE TABLE
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+INSERT 0 1
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+INSERT 0 1
+DO
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+INFO:  maintain: number_of_formerly_allocated_pages = 0
+INFO:  maintain: number_of_freshly_allocated_pages = 3
+INFO:  maintain: number_of_freed_pages = 3
+INSERT 0 1
+SET
+SET
+DO
+                            QUERY PLAN                             
+-------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Index Scan using flat_idx on source (actual rows=5 loops=1)
+         Order By: (features <-> '[10,0]'::vector)
+ Planning Time: 0.408 ms
+ Execution Time: 11.681 ms
+(5 rows)
+
+DROP INDEX
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+INFO:  maintain: number_of_formerly_allocated_pages = 0
+INFO:  maintain: number_of_freshly_allocated_pages = 3
+INFO:  maintain: number_of_freed_pages = 3
+INSERT 0 1
+SET
+DO
+                            QUERY PLAN                             
+-------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Index Scan using tree_idx on source (actual rows=5 loops=1)
+         Order By: (features <-> '[10,0]'::vector)
+ Planning Time: 0.438 ms
+ Execution Time: 1.030 ms
+(5 rows)
+
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+INSERT 0 1
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+INSERT 0 1
+CREATE FUNCTION
+ expect_error 
+--------------
+ 
+(1 row)
+
+ expect_error 
+--------------
+ 
+(1 row)
+
+ expect_error 
+--------------
+ 
+(1 row)
+
+ expect_error 
+--------------
+ 
+(1 row)
+
+CREATE TABLE
+INSERT 0 2
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+ expect_error 
+--------------
+ 
+(1 row)
+
+INSERT 0 1
+ expect_error 
+--------------
+ 
+(1 row)
+
+DELETE 1
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+ expect_error 
+--------------
+ 
+(1 row)
+
+DO
+CREATE ROLE
+GRANT
+CREATE TABLE
+INSERT 0 1
+CREATE TABLE
+INSERT 0 1
+ALTER TABLE
+CREATE POLICY
+GRANT
+SET
+ expect_error 
+--------------
+ 
+(1 row)
+
+ expect_error 
+--------------
+ 
+(1 row)
+
+SET
+SET
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+ expect_error 
+--------------
+ 
+(1 row)
+
+SET
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+ expect_error 
+--------------
+ 
+(1 row)
+
+SET
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+DO
+SET
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+DO
+SET
+SET
+CREATE TABLE
+INSERT 0 2
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+                                                                                                                                                                                                     create_vector_index                                                                                                                                                                                                      
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"dims": 2, "rows": 2, "seed": 42, "index": null, "nodes": 2, "backend": "cpu", "samples": 2, "timings": {"count_seconds": 0.001204296, "index_seconds": 0.000001, "sample_seconds": 0.000019005, "transfer_seconds": 0.000232057, "clustering_seconds": 0.000225055, "worker_read_seconds": 0.00028707, "centroid_write_seconds": 0.011511826}, "buffer_bytes": 65796, "centroid_table": "vextor_m3_smoke.large_centroids"}
+(1 row)
+
+ERROR:  Extreme spherical centroid lost its unit norm
+CONTEXT:  PL/pgSQL function inline_code_block line 5 at RAISE

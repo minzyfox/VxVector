@@ -1,0 +1,40 @@
+{
+  "date": "2026-11-05",
+  "revision": "ded616150af9a3372ad7e6badbc68ebb824c5c8b",
+  "native_build": {
+    "vx_revision": "ded616150af9a3372ad7e6badbc68ebb824c5c8b",
+    "compiler_version": "vxc 0.0.3 (ded61615)",
+    "compiler_sha256": "fe1660817615e90f7034a2523db767a22df78e108328a30afa0cc080061f6b8b",
+    "kernel_sha256": "2a47a60981c1b4c8cdcd9c74cfc2c2f3d6a3e56434a1ae9826da8911618b28dd",
+    "object_sha256": "99a02d70626f696948a9c05b1897a1eea97e64477a02d8c5e5e0ca9460f32524",
+    "platform": "macOS-26.7.1-arm64-arm-64bit-Mach-O"
+  },
+  "linux_build": {
+    "vx_revision": "ded616150af9a3372ad7e6badbc68ebb824c5c8b",
+    "compiler_version": "vxc 0.0.3",
+    "compiler_sha256": "c458b94603222ba88f3ab4d7f1b7dcd4d433d9b25d288c5aebf49e4ca485dbb6",
+    "kernel_sha256": "2a47a60981c1b4c8cdcd9c74cfc2c2f3d6a3e56434a1ae9826da8911618b28dd",
+    "object_sha256": "d6b29326c3f95b1d2aaacdb817581c8cb849a0210c2205ab9c1323535f431fa8",
+    "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.39"
+  },
+  "checks": {
+    "native_unit_tests": 35,
+    "matched_faiss_cases": 48,
+    "independent_lloyd_cases": 96,
+    "edge_cases": 6,
+    "sanitizers": "passed",
+    "contract_checks": "passed on macOS and Linux, including four mutations and two expected proof gaps",
+    "codegen_checks": "passed on macOS and Linux, including two intended mutation failures",
+    "flat_coverage": "one exact test passed",
+    "postgres_integration": "passed",
+    "snapshot": "passed",
+    "synthetic_recall_queries": 120,
+    "synthetic_index_builds": 24,
+    "synthetic_minimum_recall": 1,
+    "apple_gpu_upstream_fixture": "passed; CPU-copy checked output matches",
+    "hosted_ci": "not run",
+    "real_data_and_internal_objectives": "not rerun; retain November 4 evidence"
+  },
+  "capabilities_evidence": "vx_main_capabilities_2026-11-05.jsonl",
+  "installation_evidence": "vx_main_install_2026-11-05.json"
+}

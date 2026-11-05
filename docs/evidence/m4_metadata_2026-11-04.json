@@ -1,0 +1,24 @@
+{
+  "date": "2026-11-04",
+  "linux_vx_revision": "41e73e48191069ea4a026fbab473126759e5587c",
+  "linux_worker_sha256": "db237a50628d8426e18fb4e592d3e2f4930fb6ad39c6ff6691ce764c84627f10",
+  "linux_library_sha256": "70a28348ec9914dd9044579717ed2aac21fa626e824e4dc2215fa6d79293d903",
+  "native_mutations": {
+    "norm_overflow": "unit norm assertion failed",
+    "distance_overflow": "distinct assignment assertion failed",
+    "sum_overflow": "error status assertion failed"
+  },
+  "hosted_ci_run": "not executed",
+  "file_sha256": {
+    "src/kmeans.vx": "69cf541f0a94dc95fe13ce9d83bb690b5e255367a1471492e67b730dd0602eb9",
+    "scripts/check_cpu_correctness.py": "e7bfeae0e70262e60d95ff8bfde2f4b0a1cb78ac3d48c4886c22986e2ab33e1e",
+    "scripts/check_real_recall.py": "7487918d58c099a15f25efef393780e8c3b4d21fc664418def06b17c75f9d726",
+    "scripts/check_contracts.py": "f432854770f08153abeaa26f81f8376d72c2bed24477c3a167abbf277cc79177",
+    "build/libvextor_kmeans.dylib": "b1c4593357a448e760fea28039a4f4c42bacfd996f1bd55bd3bf03c2479c091c",
+    "tests/requirements-correctness.txt": "921ba01e984e0dbea916cafdcd6867f7dd3573421d8aeb87a3cb60e8a4e8b0a1"
+  },
+  "real_harness_analyzer_mutations": [
+    "relative mean recall loss rejected",
+    "missing result record rejected"
+  ]
+}

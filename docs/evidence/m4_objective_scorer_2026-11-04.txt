@@ -1,0 +1,15 @@
+test_angular_metrics_and_quality_conversion (test_objectives.ObjectiveTests.test_angular_metrics_and_quality_conversion) ... ok
+test_capture_dimensions_and_normalization (test_objectives.ObjectiveTests.test_capture_dimensions_and_normalization) ... ok
+test_capture_pairing_and_known_objective (test_objectives.ObjectiveTests.test_capture_pairing_and_known_objective) ... ok
+test_cosine_zero_vector_semantics (test_objectives.ObjectiveTests.test_cosine_zero_vector_semantics) ... ok
+test_invalid_objective_inputs (test_objectives.ObjectiveTests.test_invalid_objective_inputs) ... ok
+test_l2_known_answer_and_batching (test_objectives.ObjectiveTests.test_l2_known_answer_and_batching) ... ok
+test_multiline_capture_records (test_objectives.ObjectiveTests.test_multiline_capture_records) ... ok
+test_quality_gate_compares_means_across_repeats (test_objectives.ObjectiveTests.test_quality_gate_compares_means_across_repeats) ... ok
+test_quality_gate_rejects_nonfinite_costs (test_objectives.ObjectiveTests.test_quality_gate_rejects_nonfinite_costs) ... ok
+test_quality_gate_rejects_worse_clustering (test_objectives.ObjectiveTests.test_quality_gate_rejects_worse_clustering) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.002s
+
+OK

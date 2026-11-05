@@ -1,0 +1,10 @@
+Warning[W1010] at tests/frontend/pass/audit_lists_the_trusted_pointer_facts.vx:64:16: this `unsafe` block holds nothing that needs `unsafe`, so it can go
+/Users/gagan/dev/Vx/stdlib/std/vec.vx:120:14: an `assume` trusts `valid(p, self.len)`
+/Users/gagan/dev/Vx/stdlib/std/vec.vx:120:41: an `assume` trusts `initialized(p, self.len)`
+tests/frontend/pass/audit_lists_the_trusted_pointer_facts.vx:35:11: the `extern` function `c_length` ensures `!frees(s)`, and the compiler trusts it
+tests/frontend/pass/audit_lists_the_trusted_pointer_facts.vx:37:11: the `extern` function `c_buffer` ensures `valid(return, n)`, and the compiler trusts it
+tests/frontend/pass/audit_lists_the_trusted_pointer_facts.vx:52:10: `pub fn fill` requires `valid(p, n)`, and a call from C proves nothing
+tests/frontend/pass/audit_lists_the_trusted_pointer_facts.vx:61:12: an `assume` trusts `valid(p, 4)`
+tests/frontend/pass/audit_lists_the_trusted_pointer_facts.vx:63:12: an `assume` trusts `initialized(p, 4)`
+tests/frontend/pass/audit_lists_the_trusted_pointer_facts.vx:65:26: a call in `unsafe` code trusts `initialized(p, n)` of `sum`, which the compiler cannot prove
+tests/frontend/pass/audit_lists_the_trusted_pointer_facts.vx:65:26: a call in `unsafe` code trusts `valid(p, n)` of `sum`, which the compiler cannot prove

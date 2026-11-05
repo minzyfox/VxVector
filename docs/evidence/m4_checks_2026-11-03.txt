@@ -1,0 +1,88 @@
+M4 CPU correctness checks — November 3, 2026
+
+Vextor base commit: 608883d83d4603b058dbec8e4b0acf7c177b0381
+Host: macOS arm64; Python 3.14.7, NumPy 2.5.4, Faiss CPU 1.15.1.
+Database: PostgreSQL 17.11, pgvector 0.8.2, VectorChord 1.1.1, pg_vextor 0.1.0.
+Database architecture: Linux x86_64 under Colima x86 emulation on arm64 macOS.
+Installed Linux Vx revision: 41e73e48191069ea4a026fbab473126759e5587c
+Installed worker SHA256: db237a50628d8426e18fb4e592d3e2f4930fb6ad39c6ff6691ce764c84627f10
+Host compiler: vxc 0.0.3; exact build-source revision not established.
+
+Commands and results:
+- ./scripts/build.sh: passed; rebuilt the native standalone library.
+- python -B scripts/check_cpu_correctness.py: 48 matched cases, six empty/duplicate cases passed.
+- VEXTOR_WORKER="$PWD/build/vextor-worker" python -B -m unittest discover -s tests -v:
+  22 passed; zero skips.
+- ./scripts/check_data_path.sh: allocation failures and sanitizers passed.
+- DOCKER_CONTEXT=colima python3 -B scripts/check_recall.py:
+  24 index builds, two centroid-only builds, 120 queries passed; minimum recall@10=1.0.
+  Every query used all probes and epsilon=4.0; target=0.95 per query.
+  Source sizes 256 and 8192 both reported samples=32 and buffer_bytes=103864.
+  A one-byte budget was rejected without leaving an output table.
+- DOCKER_CONTEXT=colima ./scripts/check_extension.sh: passed.
+- DOCKER_CONTEXT=colima python3 -B scripts/check_snapshot.py: passed.
+- git diff --check: passed.
+
+Mutation checks:
+Each Vx source mutation compiled to an isolated temporary library before testing.
+- Divide centroid sums by count+1: centroid comparison failed.
+- Assign each row to (nearest+1)%k: nearest-leaf assertion failed.
+- Store leaf parent zero: root-parent-range assertion failed.
+- Disable normalization: unit-norm assertion failed.
+Each SQL mutation ran in its own rolled-back transaction.
+- Permit index scan for exact ground truth: exact sequential-scan plan assertion failed.
+- Disable index scans and enable sequential scans for index query: intended-index assertion failed.
+- Replace all returned IDs with the first ID: distinct-neighbor assertion failed.
+- Fetch descending distances: minimum recall assertion failed.
+An earlier mutation disabled index scans while sequential scans remained disabled.
+PostgreSQL still selected the index, so that attempt did not establish the assertion.
+The corrected plan mutation above failed as intended.
+
+Default epsilon experiment:
+At epsilon=1.9, l2_0_768 query 2 returned recall 0.90, below the unchanged 0.95 target.
+The full failed output is retained in m4_default_epsilon_2026-11-03.txt.
+Faiss early stopping was discovered during development; the final harness runs one
+Lloyd iteration per call, repeated for the exact Vx iteration count.
+
+No production performance conclusion follows from emulated SQL timings.
+Real embedding datasets, CI automation, and native Vx verification examples remain open.
+
+Script hashes:
+5df5b0b36f98f78828e895e501f2d44af157d2b1233a69a19aa790ebab8fd0d6  scripts/check_cpu_correctness.py
+767c6beb0235f8b74d8befe21accd951d2dea962f45710125b9c2accb961ddc4  scripts/check_recall.py
+9a8bd21c4c228d30531f47afb4bcef25197f4063b04ca64f4d3c6b6ded0fe1b1  tests/requirements-correctness.txt
+
+Native regression output:
+test_all_rows_are_checked_including_rows_outside_the_sample (test_data_path.DataPathTests.test_all_rows_are_checked_including_rows_outside_the_sample) ... ok
+test_budget_rejected_before_reader_and_exact_budget_succeeds (test_data_path.DataPathTests.test_budget_rejected_before_reader_and_exact_budget_succeeds) ... ok
+test_collected_sample_matches_direct_vx_for_all_metrics_and_tree_shapes (test_data_path.DataPathTests.test_collected_sample_matches_direct_vx_for_all_metrics_and_tree_shapes) ... ok
+test_full_sample_and_single_row (test_data_path.DataPathTests.test_full_sample_and_single_row) ... ok
+test_memory_plan_covers_every_buffer_and_does_not_scale_with_table (test_data_path.DataPathTests.test_memory_plan_covers_every_buffer_and_does_not_scale_with_table) ... ok
+test_sample_is_distinct_repeatable_and_independent_of_batches (test_data_path.DataPathTests.test_sample_is_distinct_repeatable_and_independent_of_batches) ... ok
+test_sampling_handles_collisions_and_partial_final_batches (test_data_path.DataPathTests.test_sampling_handles_collisions_and_partial_final_batches) ... ok
+test_shape_and_size_errors_are_rejected_before_source_reads (test_data_path.DataPathTests.test_shape_and_size_errors_are_rejected_before_source_reads) ... ok
+test_source_count_changes_and_reader_errors_leave_no_result (test_data_path.DataPathTests.test_source_count_changes_and_reader_errors_leave_no_result) ... ok
+test_batch_size_preserves_the_result (test_kmeans.KmeansTests.test_batch_size_preserves_the_result) ... ok
+test_duplicate_vectors_and_zero_cosine_vectors_stay_finite (test_kmeans.KmeansTests.test_duplicate_vectors_and_zero_cosine_vectors_stay_finite) ... ok
+test_high_dimensions (test_kmeans.KmeansTests.test_high_dimensions) ... ok
+test_inner_product_and_cosine_group_directions (test_kmeans.KmeansTests.test_inner_product_and_cosine_group_directions) ... ok
+test_invalid_shapes_and_nonfinite_input (test_kmeans.KmeansTests.test_invalid_shapes_and_nonfinite_input) ... ok
+test_l2_centroids_match_exhaustive_reference (test_kmeans.KmeansTests.test_l2_centroids_match_exhaustive_reference) ... ok
+test_restarts_do_not_increase_training_cost (test_kmeans.KmeansTests.test_restarts_do_not_increase_training_cost) ... ok
+test_sampling_uses_the_requested_rows (test_kmeans.KmeansTests.test_sampling_uses_the_requested_rows) ... ok
+test_two_levels_form_a_tree (test_kmeans.KmeansTests.test_two_levels_form_a_tree) ... ok
+test_budget_is_rejected_before_any_rows_are_read (test_worker.WorkerTests.test_budget_is_rejected_before_any_rows_are_read) ... ok
+test_invalid_magic_and_short_request_are_rejected (test_worker.WorkerTests.test_invalid_magic_and_short_request_are_rejected) ... ok
+test_real_vx_worker_produces_expected_centroids_and_parents (test_worker.WorkerTests.test_real_vx_worker_produces_expected_centroids_and_parents) ... ok
+test_short_extra_and_nonfinite_rows_return_structured_errors (test_worker.WorkerTests.test_short_extra_and_nonfinite_rows_return_structured_errors) ... ok
+
+----------------------------------------------------------------------
+Ran 22 tests in 0.228s
+
+OK
+
+Sanitizer output:
+Data path allocation, bounded-memory, and failure checks passed
+
+Snapshot output:
+Snapshot check passed: concurrent inserts and updates were excluded; centroids matched the original 64 rows.
