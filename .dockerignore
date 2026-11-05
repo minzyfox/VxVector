@@ -18,3 +18,9 @@ build/linux/*
 
 !vx-revision.txt
 !build/linux/vx-build-info.json
+
+!docker/Dockerfile.objectives
+!build/objectives/
+build/objectives/*
+!build/objectives/libvchord.so
+!build/objectives/reference-build.json

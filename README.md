@@ -53,6 +53,7 @@ existing Vx tree contains work you want to keep.
 
 The current pin is `c9612a1f1c8a2819258b159774a615f9aca298a7`.
 It adds CPU proof fixes on top of main `ded61615`; see [the proof update](docs/m4_index_proofs_2026-11-05.md).
+See [the proof update](docs/m4_index_proofs_2026-11-05.md) for validation and remaining work.
 The scripts default to `../../Vx` when `VX_ROOT` is unset. The fresh-checkout
 example overrides that default with its adjacent `../Vx` directory.
 
@@ -377,7 +378,7 @@ Run the CPU-only suite without PostgreSQL or downloaded datasets:
 bash scripts/check_cpu.sh
 ```
 
-The runner builds the native worker, then runs 25 library/adapter/worker tests,
+The runner builds the native worker, then runs 25 library/adapter/worker tests and ten objective-scorer/parser tests,
 48 matched Faiss cases, 96 independent Lloyd cases, six zero/duplicate cases,
 and allocation-failure/sanitizer checks. It exits nonzero if a check fails.
 
@@ -434,10 +435,20 @@ that must fail at specific assertions. The nearest-index loop and variable-dimen
 offset examples now pass. Kernel mutations check the result bound at the accumulation
 caller and reject invalid buffer offsets.
 These checks do not establish a proof of the complete kernel.
+Use `"$VX_ROOT/target/debug/vxc" src/kmeans.vx --audit` to list trusted pointer clauses.
+The audit identifies trust boundaries; it does not prove them.
 
-The [latest upgraded-worker results](docs/evidence/vx_main_test_summary_2026-11-04.json)
+The [November 4 upgraded-worker results](docs/evidence/vx_main_test_summary_2026-11-04.json)
 and [full recorded log](docs/evidence/vx_main_checks_2026-11-04.txt) used Vx `7cc3d2d9`.
+See [the proof update](docs/m4_index_proofs_2026-11-05.md) for the current pin.
 See [M4 details](docs/milestone_4_cpu_correctness.md) for tolerances and remaining work.
+
+### Internal trainer objectives
+
+The optional [internal objective comparison](docs/internal_objectives.md) builds a
+separate, instrumented VectorChord image, captures unrotated centroids, and scores
+both trainers on the same real vectors. Follow that guide to run it in an isolated
+Compose project. The ordinary database image does not export internal centroids.
 
 ## CPU correctness baseline
 
@@ -451,8 +462,10 @@ all-probe, epsilon-4 run passed; this does not establish production recall or sp
 The November 4 extension adds real GloVe/SIFT comparisons against VectorChord's
 internal CPU trainer: 24 builds and 3,072 queries passed the declared recall gates.
 It also fixes extreme-input normalization and rejects centroid-sum overflow.
-The CPU CI workflow is implemented. Internal clustering-objective comparison,
-full kernel proofs, and a successful hosted CI run remain open.
+The optional internal clustering-objective comparison also passes six quality
+groups using an isolated instrumented reference image; see [results and limits](docs/internal_objectives.md).
+The CPU CI workflow is implemented. Full kernel proofs and a successful hosted CI
+run remain open.
 
 ## Standalone library development
 
