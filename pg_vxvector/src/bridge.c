@@ -23,7 +23,7 @@
 #include "utils/rls.h"
 #include "utils/snapmgr.h"
 #include "utils/syscache.h"
-#include "vextor_protocol.h"
+#include "vxvector_protocol.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -52,10 +52,10 @@ static void backend_exit(int code, Datum argument) {
     }
 }
 
-void vextor_pg_init(void) {
+void vxvector_pg_init(void) {
     on_proc_exit(backend_exit, (Datum)0);
-    DefineCustomStringVariable("vextor.worker_path", "CPU worker executable", NULL,
-                               &worker_path, "/usr/local/libexec/vextor/vextor-worker",
+    DefineCustomStringVariable("vxvector.worker_path", "CPU worker executable", NULL,
+                               &worker_path, "/usr/local/libexec/vxvector/vxvector-worker",
                                PGC_SUSET, 0, NULL, NULL, NULL);
 }
 
@@ -114,7 +114,7 @@ static void cleanup(struct build_state *s) {
 static void check_deadline(struct build_state *s) {
     CHECK_FOR_INTERRUPTS();
     if (now_seconds() >= s->deadline)
-        ereport(ERROR, (errcode(ERRCODE_QUERY_CANCELED), errmsg("Vextor CPU worker timed out")));
+        ereport(ERROR, (errcode(ERRCODE_QUERY_CANCELED), errmsg("VxVector CPU worker timed out")));
 }
 
 static void transfer(struct build_state *s, void *data, size_t bytes, bool writing) {
@@ -130,18 +130,18 @@ static void transfer(struct build_state *s, void *data, size_t bytes, bool writi
         if (count < 0 && errno == EINTR)
             continue;
         if (count == 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
-            ereport(ERROR, (errcode(ERRCODE_EXTERNAL_ROUTINE_EXCEPTION), errmsg("Vextor CPU worker closed the connection or failed")));
+            ereport(ERROR, (errcode(ERRCODE_EXTERNAL_ROUTINE_EXCEPTION), errmsg("VxVector CPU worker closed the connection or failed")));
         struct pollfd descriptor = {s->fd, writing ? POLLOUT : POLLIN, 0};
         int ready = poll(&descriptor, 1, 50);
         if (ready < 0 && errno != EINTR)
-            ereport(ERROR, (errmsg("Could not wait for the Vextor CPU worker: %m")));
+            ereport(ERROR, (errmsg("Could not wait for the VxVector CPU worker: %m")));
     }
 }
 
 static void spawn_worker(struct build_state *s) {
     int sockets[2];
     if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sockets) != 0)
-        ereport(ERROR, (errmsg("Could not create the Vextor worker socket: %m")));
+        ereport(ERROR, (errmsg("Could not create the VxVector worker socket: %m")));
     s->fd = sockets[0];
     active_worker_fd = s->fd;
     posix_spawn_file_actions_t actions;
@@ -159,21 +159,21 @@ static void spawn_worker(struct build_state *s) {
     posix_spawn_file_actions_destroy(&actions);
     close(sockets[1]);
     if (code)
-        ereport(ERROR, (errcode(ERRCODE_EXTERNAL_ROUTINE_EXCEPTION), errmsg("Could not start the Vextor CPU worker: %s", strerror(code))));
+        ereport(ERROR, (errcode(ERRCODE_EXTERNAL_ROUTINE_EXCEPTION), errmsg("Could not start the VxVector CPU worker: %s", strerror(code))));
     active_worker_pid = s->pid;
     if (fcntl(s->fd, F_SETFL, O_NONBLOCK) < 0)
-        ereport(ERROR, (errmsg("Could not configure the Vextor worker socket: %m")));
+        ereport(ERROR, (errmsg("Could not configure the VxVector worker socket: %m")));
 }
 
-static void read_reply(struct build_state *s, struct vextor_worker_reply *reply,
-                        struct vextor_cpu_options *options, struct vextor_cpu_plan *plan) {
+static void read_reply(struct build_state *s, struct vxvector_worker_reply *reply,
+                        struct vxvector_cpu_options *options, struct vxvector_cpu_plan *plan) {
     transfer(s, reply, sizeof(*reply), false);
     reply->message[sizeof(reply->message) - 1] = 0;
     if (reply->status)
-        ereport(ERROR, (errcode(ERRCODE_EXTERNAL_ROUTINE_EXCEPTION), errmsg("Vextor CPU worker: %s", reply->message)));
+        ereport(ERROR, (errcode(ERRCODE_EXTERNAL_ROUTINE_EXCEPTION), errmsg("VxVector CPU worker: %s", reply->message)));
     if (reply->dims != options->dims || reply->nodes != plan->node_count ||
         reply->samples != plan->sample_count || reply->buffer_bytes != plan->buffer_bytes + (uint64_t)options->dims * 4)
-        ereport(ERROR, (errmsg("Vextor CPU worker returned an incompatible response")));
+        ereport(ERROR, (errmsg("VxVector CPU worker returned an incompatible response")));
 }
 
 static void finish_worker(struct build_state *s) {
@@ -188,11 +188,11 @@ static void finish_worker(struct build_state *s) {
             s->pid = 0;
             active_worker_pid = 0;
             if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
-                ereport(ERROR, (errmsg("Vextor CPU worker exited unsuccessfully")));
+                ereport(ERROR, (errmsg("VxVector CPU worker exited unsuccessfully")));
             return;
         }
         if (waited < 0 && errno != EINTR)
-            ereport(ERROR, (errmsg("Could not reap the Vextor CPU worker: %m")));
+            ereport(ERROR, (errmsg("Could not reap the VxVector CPU worker: %m")));
         pg_usleep(10000);
     }
 }
@@ -233,10 +233,10 @@ static char *output_name(const char *provided, const char *fallback, const char 
 static void sql(const char *statement) {
     CHECK_FOR_INTERRUPTS();
     if (SPI_execute(statement, false, 0) < 0)
-        ereport(ERROR, (errmsg("Vextor could not execute a database statement")));
+        ereport(ERROR, (errmsg("VxVector could not execute a database statement")));
 }
 
-char *vextor_pg_run(Oid relation_id, const char *column, const int32_t *lists, int list_count,
+char *vxvector_pg_run(Oid relation_id, const char *column, const int32_t *lists, int list_count,
                     int sampling, int batch, int iterations, int restarts, const char *metric,
                     bool skip_index, bool spherical, bool residual, int seed, int64 budget,
                     const char *centroid_name, const char *index_name, int timeout_ms) {
@@ -251,9 +251,9 @@ char *vextor_pg_run(Oid relation_id, const char *column, const int32_t *lists, i
         s->relation = table_open(relation_id, AccessShareLock);
         if (s->relation->rd_rel->relkind != RELKIND_RELATION || s->relation->rd_rel->relhassubclass ||
             s->relation->rd_rel->relam != get_table_am_oid("heap", false))
-            ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("Vextor currently accepts ordinary heap tables")));
+            ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("VxVector currently accepts ordinary heap tables")));
         if (check_enable_rls(relation_id, InvalidOid, false) == RLS_ENABLED)
-            ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("Vextor does not yet support tables with active row-level security")));
+            ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("VxVector does not yet support tables with active row-level security")));
         AttrNumber attribute = get_attnum(relation_id, column);
         if (attribute <= 0)
             ereport(ERROR, (errcode(ERRCODE_UNDEFINED_COLUMN), errmsg("Source vector column does not exist")));
@@ -261,7 +261,7 @@ char *vextor_pg_run(Oid relation_id, const char *column, const int32_t *lists, i
             pg_attribute_aclcheck(relation_id, attribute, GetUserId(), ACL_SELECT) != ACLCHECK_OK)
             aclcheck_error(ACLCHECK_NO_PRIV, OBJECT_COLUMN, column);
         if (SPI_connect() != SPI_OK_CONNECT)
-            ereport(ERROR, (errmsg("Could not connect Vextor to SPI")));
+            ereport(ERROR, (errmsg("Could not connect VxVector to SPI")));
         s->spi = true;
         if (SPI_execute("SELECT extnamespace, (SELECT extnamespace FROM pg_catalog.pg_extension WHERE extname = 'vchord') FROM pg_catalog.pg_extension WHERE extname = 'vector'", true, 1) != SPI_OK_SELECT || SPI_processed != 1)
             ereport(ERROR, (errmsg("pgvector must be installed")));
@@ -298,7 +298,7 @@ char *vextor_pg_run(Oid relation_id, const char *column, const int32_t *lists, i
         double count_seconds = now_seconds() - count_start;
 
         int metric_code = strcmp(metric, "l2") == 0 ? 0 : strcmp(metric, "ip") == 0 ? 1 : strcmp(metric, "cos") == 0 ? 2 : -1;
-        struct vextor_cpu_options options = {
+        struct vxvector_cpu_options options = {
             .row_count = rows, .dims = dims, .root_count = list_count == 2 ? lists[0] : 0,
             .leaf_count = lists[list_count - 1], .sampling_factor = sampling, .batch_size = batch,
             .iterations = iterations, .restarts = restarts, .metric = metric_code,
@@ -311,15 +311,15 @@ char *vextor_pg_run(Oid relation_id, const char *column, const int32_t *lists, i
                               (uint64)(options.leaf_count > 0 ? options.leaf_count : 0);
         uint64 reserve = node_count * ((uint64)dims * 4 + 4) + (uint64)dims * 32 + 65536;
         if (reserve >= (uint64)budget)
-            ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("Vextor buffers exceed the configured memory budget")));
+            ereport(ERROR, (errcode(ERRCODE_OUT_OF_MEMORY), errmsg("VxVector buffers exceed the configured memory budget")));
         options.memory_budget_bytes -= reserve;
-        struct vextor_cpu_options planned_options = options;
+        struct vxvector_cpu_options planned_options = options;
         if (planned_options.memory_budget_bytes <= (uint64)dims * 4)
             ereport(ERROR, (errmsg("Memory budget cannot hold a worker input row")));
         planned_options.memory_budget_bytes -= (uint64)dims * 4;
-        struct vextor_cpu_plan plan;
-        struct vextor_data_error error;
-        if (vextor_plan_cpu_v1(&planned_options, &plan, &error) != 0)
+        struct vxvector_cpu_plan plan;
+        struct vxvector_data_error error;
+        if (vxvector_plan_cpu_v1(&planned_options, &plan, &error) != 0)
             ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("%s", error.message)));
         uint64 node_bytes = plan.node_count * (uint64)dims * 4;
         if (node_bytes > MaxAllocSize || plan.node_count * 4 > MaxAllocSize)
@@ -329,17 +329,17 @@ char *vextor_pg_run(Oid relation_id, const char *column, const int32_t *lists, i
         float *values = palloc((Size)dims * 4);
         const char *schema = get_namespace_name(RelationGetNamespace(s->relation));
         const char *source_name = pstrdup(RelationGetRelationName(s->relation));
-        char *centroids = output_name(centroid_name, psprintf("%s_vextor_centroids", source_name), schema);
-        char *index = output_name(index_name, psprintf("%s_vextor_idx", source_name), schema);
+        char *centroids = output_name(centroid_name, psprintf("%s_vxvector_centroids", source_name), schema);
+        char *index = output_name(index_name, psprintf("%s_vxvector_idx", source_name), schema);
         char *source = quote_qualified_identifier(schema, source_name);
         char *vector_sql_type = quote_qualified_identifier(get_namespace_name(vector_namespace), "vector");
 
         ereport(WARNING, (errmsg("GPU acceleration is unavailable; running CPU k-means")));
         s->deadline = now_seconds() + (double)timeout_ms / 1000.0;
         spawn_worker(s);
-        struct vextor_worker_request request = {VEXTOR_WORKER_MAGIC, options};
+        struct vxvector_worker_request request = {VXVECTOR_WORKER_MAGIC, options};
         transfer(s, &request, sizeof(request), true);
-        struct vextor_worker_reply reply;
+        struct vxvector_worker_reply reply;
         read_reply(s, &reply, &options, &plan);
         double transfer_start = now_seconds();
         s->scan = table_beginscan_strat(s->relation, s->snapshot, 0, NULL, true, false);
@@ -396,7 +396,7 @@ char *vextor_pg_run(Oid relation_id, const char *column, const int32_t *lists, i
             Datum arguments[] = {Int32GetDatum((int32)node), Int32GetDatum(parents[node]), PointerGetDatum(array)};
             char nulls[] = {' ', node == 0 ? 'n' : ' ', ' '};
             if (SPI_execute_with_args(insert, 3, types, arguments, nulls, false, 0) != SPI_OK_INSERT)
-                ereport(ERROR, (errmsg("Could not write Vextor centroids")));
+                ereport(ERROR, (errmsg("Could not write VxVector centroids")));
             pfree(array);
         }
         double write_seconds = now_seconds() - write_start;
@@ -409,7 +409,7 @@ char *vextor_pg_run(Oid relation_id, const char *column, const int32_t *lists, i
             escape_json(&table_literal, centroids);
             char *options_text = psprintf("residual_quantization = %s\n[build.external]\ntable = %s\n", residual ? "true" : "false", table_literal.data);
             sql(psprintf("CREATE INDEX %s ON %s USING vchordrq (%s %s) WITH (options = %s)",
-                            quote_identifier(index_name ? index_name : psprintf("%s_vextor_idx", source_name)),
+                            quote_identifier(index_name ? index_name : psprintf("%s_vxvector_idx", source_name)),
                             source, quote_identifier(column), quote_qualified_identifier(get_namespace_name(index_namespace), opclass),
                             quote_literal_cstr(options_text)));
         }

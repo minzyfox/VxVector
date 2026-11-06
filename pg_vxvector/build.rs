@@ -11,15 +11,15 @@ fn main() {
     cc::Build::new()
         .file("src/bridge.c")
         .file("../src/data_path.c")
-        .define("VEXTOR_PLAN_ONLY", None)
+        .define("VXVECTOR_PLAN_ONLY", None)
         .include(include.trim())
         .include("../include")
         .flag("-std=gnu11")
         // PostgreSQL inline headers contain unused parameters.
         .flag("-Wno-unused-parameter")
-        .compile("vextor_pg_bridge");
+        .compile("vxvector_pg_bridge");
     println!("cargo:rerun-if-changed=src/bridge.c");
     println!("cargo:rerun-if-changed=../src/data_path.c");
-    println!("cargo:rerun-if-changed=../include/vextor_protocol.h");
-    println!("cargo:rerun-if-changed=../include/vextor_data_path.h");
+    println!("cargo:rerun-if-changed=../include/vxvector_protocol.h");
+    println!("cargo:rerun-if-changed=../include/vxvector_data_path.h");
 }

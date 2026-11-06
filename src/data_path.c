@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
-#include "vextor_data_path.h"
-#include "vextor_kmeans.h"
+#include "vxvector_data_path.h"
+#include "vxvector_kmeans.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -13,7 +13,7 @@ struct sample_position {
     uint64_t row, destination;
 };
 
-static int32_t fail(struct vextor_data_error *error, int32_t code,
+static int32_t fail(struct vxvector_data_error *error, int32_t code,
                     const char *message) {
     if (error) {
         error->code = code;
@@ -30,9 +30,9 @@ static int add_buffer(uint64_t *total, uint64_t count, uint64_t width) {
     return 1;
 }
 
-int32_t vextor_plan_cpu_v1(const struct vextor_cpu_options *o,
-                          struct vextor_cpu_plan *plan,
-                          struct vextor_data_error *error) {
+int32_t vxvector_plan_cpu_v1(const struct vxvector_cpu_options *o,
+                          struct vxvector_cpu_plan *plan,
+                          struct vxvector_data_error *error) {
     if (plan)
         memset(plan, 0, sizeof(*plan));
     if (!o || !plan || o->row_count == 0 || o->row_count > INT64_MAX ||
@@ -43,13 +43,13 @@ int32_t vextor_plan_cpu_v1(const struct vextor_cpu_options *o,
         o->sampling_factor <= 0 || o->batch_size <= 0 || o->iterations <= 0 ||
         o->restarts <= 0 || o->metric < 0 || o->metric > 2 ||
         (o->spherical != 0 && o->spherical != 1) || o->seed < 0)
-        return fail(error, VEXTOR_DATA_INVALID, "Invalid CPU data path shape or option");
+        return fail(error, VXVECTOR_DATA_INVALID, "Invalid CPU data path shape or option");
 
-    struct vextor_cpu_plan p = {0};
+    struct vxvector_cpu_plan p = {0};
     uint64_t requested = (uint64_t)o->leaf_count * o->sampling_factor;
     p.sample_count = requested < o->row_count ? requested : o->row_count;
     if (p.sample_count > INT32_MAX)
-        return fail(error, VEXTOR_DATA_OVERFLOW, "Sample count exceeds the Vx i32 ABI");
+        return fail(error, VXVECTOR_DATA_OVERFLOW, "Sample count exceeds the Vx i32 ABI");
     p.batch_rows = (uint64_t)o->batch_size < o->row_count ?
                    (uint64_t)o->batch_size : o->row_count;
     p.node_count = 1 + (uint64_t)o->root_count + o->leaf_count;
@@ -68,14 +68,14 @@ int32_t vextor_plan_cpu_v1(const struct vextor_cpu_options *o,
         !add_buffer(&p.buffer_bytes, p.sample_count, sizeof(uint64_t)) ||
         !add_buffer(&p.buffer_bytes, p.sample_count, sizeof(struct sample_position)) ||
         !add_buffer(&p.buffer_bytes, p.hash_slots, sizeof(uint64_t)))
-        return fail(error, VEXTOR_DATA_OVERFLOW, "CPU buffer sizes exceed the addressable allocation limit");
+        return fail(error, VXVECTOR_DATA_OVERFLOW, "CPU buffer sizes exceed the addressable allocation limit");
     *plan = p;
     if (p.buffer_bytes > o->memory_budget_bytes)
-        return fail(error, VEXTOR_DATA_BUDGET, "CPU buffers exceed the configured memory budget");
-    return fail(error, VEXTOR_DATA_OK, "");
+        return fail(error, VXVECTOR_DATA_BUDGET, "CPU buffers exceed the configured memory budget");
+    return fail(error, VXVECTOR_DATA_OK, "");
 }
 
-#ifndef VEXTOR_PLAN_ONLY
+#ifndef VXVECTOR_PLAN_ONLY
 /* SplitMix64 defines the seed sequence independently of the platform C library. */
 static uint64_t random_u64(uint64_t *state) {
     uint64_t z = (*state += UINT64_C(0x9e3779b97f4a7c15));
@@ -133,7 +133,7 @@ static double seconds(void) {
     return (double)time.tv_sec + (double)time.tv_nsec / 1e9;
 }
 
-void vextor_free_cpu_result_v1(struct vextor_cpu_result *result) {
+void vxvector_free_cpu_result_v1(struct vxvector_cpu_result *result) {
     if (!result)
         return;
     free(result->sample);
@@ -144,20 +144,20 @@ void vextor_free_cpu_result_v1(struct vextor_cpu_result *result) {
     memset(result, 0, sizeof(*result));
 }
 
-int32_t vextor_run_cpu_v1(const struct vextor_cpu_options *o,
-                         vextor_next_row_fn next, void *context,
-                         struct vextor_cpu_result *result,
-                         struct vextor_data_error *error) {
+int32_t vxvector_run_cpu_v1(const struct vxvector_cpu_options *o,
+                         vxvector_next_row_fn next, void *context,
+                         struct vxvector_cpu_result *result,
+                         struct vxvector_data_error *error) {
     if (!result)
-        return fail(error, VEXTOR_DATA_INVALID, "A CPU result destination is required");
+        return fail(error, VXVECTOR_DATA_INVALID, "A CPU result destination is required");
     memset(result, 0, sizeof(*result));
     if (!next)
-        return fail(error, VEXTOR_DATA_INVALID, "A source row reader is required");
-    struct vextor_cpu_result r = {0};
-    int32_t status = vextor_plan_cpu_v1(o, &r.plan, error);
-    if (status != VEXTOR_DATA_OK)
+        return fail(error, VXVECTOR_DATA_INVALID, "A source row reader is required");
+    struct vxvector_cpu_result r = {0};
+    int32_t status = vxvector_plan_cpu_v1(o, &r.plan, error);
+    if (status != VXVECTOR_DATA_OK)
         return status;
-    struct vextor_cpu_plan p = r.plan;
+    struct vxvector_cpu_plan p = r.plan;
     size_t dims = (size_t)o->dims;
     r.sample = malloc((size_t)p.sample_count * dims * sizeof(float));
     r.sample_rows = malloc((size_t)p.sample_count * sizeof(uint64_t));
@@ -172,7 +172,7 @@ int32_t vextor_run_cpu_v1(const struct vextor_cpu_options *o,
     uint64_t *table = malloc((size_t)p.hash_slots * sizeof(uint64_t));
     if (!r.sample || !r.sample_rows || !r.nodes || !r.parents || !r.assignments ||
         !batch || !current || !sums || !counts || !positions || !table) {
-        status = fail(error, VEXTOR_DATA_MEMORY, "Could not allocate CPU data path buffers");
+        status = fail(error, VXVECTOR_DATA_MEMORY, "Could not allocate CPU data path buffers");
         goto cleanup;
     }
 
@@ -201,21 +201,21 @@ int32_t vextor_run_cpu_v1(const struct vextor_cpu_options *o,
         uint64_t rows = remaining < p.batch_rows ? remaining : p.batch_rows;
         start = seconds();
         for (uint64_t row = 0; row < rows; ++row) {
-            struct vextor_input_row input = {0};
+            struct vxvector_input_row input = {0};
             int32_t read_status = next(context, &input);
             if (read_status != 1) {
-                status = fail(error, VEXTOR_DATA_SOURCE,
+                status = fail(error, VXVECTOR_DATA_SOURCE,
                               read_status == 0 ? "Source ended before the declared row count" : "Source row reader failed");
                 goto cleanup;
             }
-            if (!input.values || input.type != VEXTOR_INPUT_VECTOR || input.dims != dims) {
-                status = fail(error, VEXTOR_DATA_INVALID, "Source contains a null vector, unsupported type, or mixed dimensions");
+            if (!input.values || input.type != VXVECTOR_INPUT_VECTOR || input.dims != dims) {
+                status = fail(error, VXVECTOR_DATA_INVALID, "Source contains a null vector, unsupported type, or mixed dimensions");
                 goto cleanup;
             }
             for (size_t d = 0; d < dims; ++d) {
                 float value = input.values[d];
                 if (!isfinite(value)) {
-                    status = fail(error, VEXTOR_DATA_INVALID, "Source contains a nonfinite vector component");
+                    status = fail(error, VXVECTOR_DATA_INVALID, "Source contains a nonfinite vector component");
                     goto cleanup;
                 }
                 batch[(size_t)row * dims + d] = value;
@@ -232,36 +232,36 @@ int32_t vextor_run_cpu_v1(const struct vextor_cpu_options *o,
         r.sample_seconds += seconds() - start;
         base += rows;
     }
-    struct vextor_input_row extra = {0};
+    struct vxvector_input_row extra = {0};
     start = seconds();
     int32_t read_status = next(context, &extra);
     r.read_seconds += seconds() - start;
     if (read_status != 0) {
-        status = fail(error, VEXTOR_DATA_SOURCE,
+        status = fail(error, VXVECTOR_DATA_SOURCE,
                       read_status == 1 ? "Source exceeds the declared row count" : "Source row reader failed");
         goto cleanup;
     }
 
     start = seconds();
-    status = vextor_kmeans_v1(r.sample, (int32_t)p.sample_count, o->dims,
+    status = vxvector_kmeans_v1(r.sample, (int32_t)p.sample_count, o->dims,
                              o->root_count, o->leaf_count, o->sampling_factor,
                              o->batch_size, o->iterations, o->restarts, o->metric,
                              o->spherical, o->seed, r.nodes, r.parents,
                              r.assignments, current, sums, counts);
     r.clustering_seconds = seconds() - start;
     if (status != 0) {
-        status = fail(error, VEXTOR_DATA_KMEANS, "Vx CPU k-means rejected the collected sample");
+        status = fail(error, VXVECTOR_DATA_KMEANS, "Vx CPU k-means rejected the collected sample");
         goto cleanup;
     }
     for (uint64_t i = 0; i < p.node_count * dims; ++i) {
         if (!isfinite(r.nodes[i])) {
-            status = fail(error, VEXTOR_DATA_KMEANS, "Vx CPU k-means produced a nonfinite centroid");
+            status = fail(error, VXVECTOR_DATA_KMEANS, "Vx CPU k-means produced a nonfinite centroid");
             goto cleanup;
         }
     }
     *result = r;
     memset(&r, 0, sizeof(r));
-    status = fail(error, VEXTOR_DATA_OK, "");
+    status = fail(error, VXVECTOR_DATA_OK, "");
 
 cleanup:
     free(batch);
@@ -270,8 +270,8 @@ cleanup:
     free(counts);
     free(positions);
     free(table);
-    vextor_free_cpu_result_v1(&r);
+    vxvector_free_cpu_result_v1(&r);
     return status;
 }
 
-#endif /* VEXTOR_PLAN_ONLY */
+#endif /* VXVECTOR_PLAN_ONLY */

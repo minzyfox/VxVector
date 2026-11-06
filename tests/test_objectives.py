@@ -23,12 +23,14 @@ class ObjectiveTests(unittest.TestCase):
             return check_quality(rows)
 
     def test_multiline_capture_records(self):
-        text = 'ignored output\nVEXTOR_CENTROIDS {"trainer":"vx",\n"levels":[[1],\n[2]]}\n'
-        text += 'NOTICE:  VEXTOR_CENTROIDS {"trainer":"internal","levels":[[3]]}\n'
+        text = 'ignored output\nVXVECTOR_CENTROIDS {"trainer":"vx",\n"levels":[[1],\n[2]]}\n'
+        text += 'NOTICE:  VXVECTOR_CENTROIDS {"trainer":"internal","levels":[[3]]}\n'
         self.assertEqual(parse_captures(text), [dict(trainer='vx', levels=[[1], [2]]),
                                                dict(trainer='internal', levels=[[3]])])
+        legacy = text.replace('VXVECTOR_CENTROIDS', 'VEXTOR_CENTROIDS')
+        self.assertEqual(parse_captures(legacy), parse_captures(text))
         with self.assertRaises(ValueError):
-            parse_captures('VEXTOR_CENTROIDS {broken}')
+            parse_captures('VXVECTOR_CENTROIDS {broken}')
 
     def test_l2_known_answer_and_batching(self):
         points = np.array([[0.], [2.], [10.], [12.]])

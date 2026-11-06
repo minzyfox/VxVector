@@ -1,11 +1,11 @@
 # Milestone 3: CPU worker and PostgreSQL extension
 
 The CPU integration uses PostgreSQL 17, pgvector, VectorChord, and the real Vx k-means implementation.
-The pgrx extension is `pg_vextor` version 0.1.0. GPU acceleration remains M5 work.
+The pgrx extension is `pg_vxvector` version 0.1.0. GPU acceleration remains M5 work.
 
 ## Build and run
 
-Run these commands from the Vextor repository:
+Run these commands from the VxVector repository:
 
 ```sh
 export DOCKER_CONTEXT=colima
@@ -13,14 +13,14 @@ export DOCKER_CONTEXT=colima
 ./scripts/build_linux_worker.sh
 ./scripts/build_extension.sh
 docker-compose up -d --no-build --wait
-docker-compose exec postgres psql -U vextor -d vextor \
-  -c 'CREATE EXTENSION IF NOT EXISTS pg_vextor;'
+docker-compose exec postgres psql -U vxvector -d vxvector \
+  -c 'CREATE EXTENSION IF NOT EXISTS pg_vxvector;'
 ```
 
-The base image is `vextor-postgres:17-dev`. The complete image is `vextor-postgres:17-vextor`.
-Compose uses the complete image by default, with the existing Vextor volume and loopback port 15432.
+The base image is `vxvector-postgres:17-dev`. The complete image is `vxvector-postgres:17-vxvector`.
+Compose uses the complete image by default, with the existing VxVector volume and loopback port 15432.
 The original database on port 5432 uses a separate container and volume.
-The extension initializer runs automatically for a fresh Vextor database volume.
+The extension initializer runs automatically for a fresh VxVector database volume.
 The explicit `CREATE EXTENSION` command also handles an existing volume.
 
 The Linux compiler build uses the committed HEAD of `VX_ROOT`, which defaults to `../../Vx`.
@@ -33,8 +33,8 @@ docker build -f ../../Vx/docker/Dockerfile.build -t vx-build:llvm22 ../../Vx
 ```
 
 The first compiler build is slow in the emulated x86 VM. Later builds reuse dedicated caches.
-The compiler container is `vextor-vx-build`, backed by `vextor_vx_build`.
-The pgrx container is `vextor-extension-build`, backed by `vextor_extension_build` and `vextor_extension_cargo`.
+The compiler container is `vxvector-vx-build`, backed by `vxvector_vx_build`.
+The pgrx container is `vxvector-extension-build`, backed by `vxvector_extension_build` and `vxvector_extension_cargo`.
 Both build scripts use two Cargo jobs. Logs and Linux artifacts remain under `build/linux/`.
 The extension build script compiles pgrx inside its builder, then packages that shared library in `docker/Dockerfile.extension`.
 That Dockerfile also links the generated Vx object and C adapter into the worker library.
@@ -45,7 +45,7 @@ The backend library does not load Vx, LLVM, CUDA, or the worker library.
 For an existing table with a `vector(3)` column named `features`, train centroids without creating an index:
 
 ```sql
-SELECT vextor.create_vector_index(
+SELECT vxvector.create_vector_index(
     'public.items', 'features', ARRAY[32],
     skip_index_build => true,
     centroid_table => 'items_training_centroids'
@@ -55,10 +55,10 @@ SELECT vextor.create_vector_index(
 To train centroids and create a VectorChord index, choose a different output table:
 
 ```sql
-SELECT vextor.create_vector_index(
+SELECT vxvector.create_vector_index(
     'public.items', 'features', ARRAY[32],
     centroid_table => 'items_index_centroids',
-    index_name => 'items_vextor_idx'
+    index_name => 'items_vxvector_idx'
 );
 SET vchordrq.probes = '8';
 EXPLAIN (ANALYZE, COSTS OFF)
@@ -73,10 +73,10 @@ Probe counts affect recall and query cost. The image tests use small trees and i
 The function also accepts `sampling_factor`, `batch_size`, `kmeans_iterations`, `kmeans_nredo`, and `distance_operator` (`l2`, `ip`, `cos`).
 Other options are `spherical_centroids`, `residual_quantization`, `seed`, `memory_budget_bytes`, and `worker_timeout_ms`.
 The default buffer budget is 256 MiB. The default worker deadline is 300,000 milliseconds.
-See `pg_vextor/sql/pg_vextor--0.1.0.sql` for the complete signature and defaults.
+See `pg_vxvector/sql/pg_vxvector--0.1.0.sql` for the complete signature and defaults.
 
 Output names are individual identifiers in the source table's schema.
-Defaults are `<source>_vextor_centroids` and `<source>_vextor_idx`.
+Defaults are `<source>_vxvector_centroids` and `<source>_vxvector_idx`.
 Names must contain 1 through 63 bytes. Supply shorter names for a long source name.
 Existing output tables and indexes cause an error. The function does not replace them.
 
@@ -117,7 +117,7 @@ The server creates outputs only after receiving valid results and a successful w
 Centroid writes and index creation use the caller's transaction.
 A later index error rolls back centroid creation as well.
 
-`vextor.worker_path` selects the installed worker executable.
+`vxvector.worker_path` selects the installed worker executable.
 Only superusers can change it. Regression checks use it to inject worker failure, abort, and delay.
 The local IPC protocol is versioned and requires matching backend/worker architecture and ABI.
 It is not a network protocol.

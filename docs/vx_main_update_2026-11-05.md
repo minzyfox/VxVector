@@ -1,5 +1,7 @@
 # Vx main update: November 5, 2026
 
+> Historical validation record. Names and runtime identifiers below reflect the installation before the VxVector rename. See the [current setup](../README.md).
+
 ## Revision and scope
 
 Vextor now pins `ded616150af9a3372ad7e6badbc68ebb824c5c8b`.

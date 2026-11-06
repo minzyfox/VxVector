@@ -1,5 +1,5 @@
 // Standalone k-means over row-major float32 arrays.
-// The caller owns every buffer. See include/vextor_kmeans.h for capacities.
+// The caller owns every buffer. See include/vxvector_kmeans.h for capacities.
 import core::convert;
 import core::num;
 import core::ptr;
@@ -282,7 +282,7 @@ requires k > 0 && dims > 0
 // metric: 0=l2, 1=inner product, 2=cosine. root_count=0 means flat clustering.
 // nodes contains the zero root, optional root centroids, then leaf centroids.
 // Returns 1 for invalid arguments or float32 centroid-sum overflow.
-pub fn vextor_kmeans_v1(points: *const f32, rows: i32, dims: i32,
+pub fn vxvector_kmeans_v1(points: *const f32, rows: i32, dims: i32,
 root_count: i32, leaf_count: i32,
 sampling_factor: i32, batch_size: i32,
 iterations: i32, restarts: i32, metric: i32,

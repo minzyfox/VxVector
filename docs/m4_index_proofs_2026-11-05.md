@@ -1,5 +1,7 @@
 # M4 index proofs — November 5, 2026
 
+> Historical validation record. Names and runtime identifiers below reflect the installation before the VxVector rename. See the [current setup](../README.md).
+
 The kernel now proves that `nearest` returns a valid centroid index.
 Its accumulation caller must meet the corresponding numeric requirements.
 The `buffer_index` helper proves widened row-major centroid offsets fit within

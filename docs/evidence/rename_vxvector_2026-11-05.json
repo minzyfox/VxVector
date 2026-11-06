@@ -1,0 +1,54 @@
+{
+  "project": "VxVector",
+  "extension": "pg_vxvector",
+  "repository_location_unchanged": true,
+  "installed": {
+    "database": "vxvector",
+    "role": "vxvector",
+    "extension": "pg_vxvector",
+    "version": "0.1.0",
+    "function_library": "$libdir/pg_vxvector",
+    "worker_path": "/usr/local/libexec/vxvector/vxvector-worker"
+  },
+  "container": "vxvector-postgres-1",
+  "image": "sha256:ef7615a7edc1a2b8a5fad6be6553ba79782b55906aec576d960ae8f17d8c2b4d",
+  "ports": "5432/tcp -> 127.0.0.1:15432",
+  "native_build": {
+    "vx_revision": "c9612a1f1c8a2819258b159774a615f9aca298a7",
+    "compiler_version": "vxc 0.0.3 (c9612a1f)",
+    "compiler_sha256": "cc50f22991cb5b811f58b63b30d2f1f1ad9f5cf1ea37480c3ceabfece659f4b3",
+    "kernel_sha256": "df18ec5b215c7ef853138588cda615f573bb4cc06e0378a374a9f97c96c72261",
+    "object_sha256": "2992c737da2df4c1bb6a9bb4464e793a0fd083b6a74ae44f3a28218752cb8441",
+    "platform": "macOS-26.7.1-arm64-arm-64bit-Mach-O"
+  },
+  "linux_build": {
+    "vx_revision": "c9612a1f1c8a2819258b159774a615f9aca298a7",
+    "compiler_version": "vxc 0.0.3",
+    "compiler_sha256": "d20f2bf5888289af0d5fdf6a320544c57c561c9ddeec23ce5f353b4103d6f2eb",
+    "kernel_sha256": "df18ec5b215c7ef853138588cda615f573bb4cc06e0378a374a9f97c96c72261",
+    "object_sha256": "49764ea24e7f21d3d76afce7507a42f85e174c4da344ba128b4e7017a99bad20",
+    "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.39"
+  },
+  "solver_version": "5.1.0",
+  "native_unit_tests": 35,
+  "faiss_cases": 48,
+  "lloyd_cases": 96,
+  "edge_cases": 6,
+  "native_sanitizers": "passed",
+  "contract_checks": {
+    "native": "passed",
+    "linux": "passed"
+  },
+  "postgres_smoke": "passed",
+  "postgres_extension_isolation_cancellation_rollback": "passed",
+  "postgres_snapshot": "passed",
+  "postgres_recall": {
+    "index_builds": 24,
+    "centroid_only_builds": 2,
+    "queries": 120,
+    "minimum_recall": 1.0
+  },
+  "historical_evidence_contents": "unchanged",
+  "full_compiler_suite": "not run",
+  "real_dataset_comparisons": "not rerun"
+}

@@ -1,0 +1,6 @@
+comment = 'VxVector CPU k-means for VectorChord external index builds'
+default_version = '0.1.0'
+module_pathname = '$libdir/pg_vxvector'
+relocatable = false
+requires = 'vector,vchord'
+superuser = true

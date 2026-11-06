@@ -20,7 +20,7 @@ mkdir -p "$project_root/build"
   source config.local
   compiler="$vx_root/target/$profile/vxc"
   if [[ "$("$compiler" --version)" != *"(${revision:0:8})"* ]]; then
-    echo "Rebuild Vx with VX_VERSION_WITH_COMMIT=1 before building Vextor." >&2
+    echo "Rebuild Vx with VX_VERSION_WITH_COMMIT=1 before building VxVector." >&2
     exit 1
   fi
   if ! VX_FLAT_DBG=1 "$compiler" "$project_root/src/kmeans.vx" \
@@ -41,17 +41,17 @@ mkdir -p "$project_root/build"
     clang -dynamiclib "$project_root/build/kmeans.o" "$project_root/build/data_path.o" \
       "$vx_root/target/$profile/libvx_std_core.dylib" \
       -Wl,-rpath,"$vx_root/target/$profile" \
-      -o "$project_root/build/libvextor_kmeans.dylib"
+      -o "$project_root/build/libvxvector_kmeans.dylib"
   else
     clang -shared "$project_root/build/kmeans.o" "$project_root/build/data_path.o" \
       "$vx_root/target/$profile/libvx_std_core.so" \
       -Wl,-rpath,"$vx_root/target/$profile" -lm \
-      -o "$project_root/build/libvextor_kmeans.so"
+      -o "$project_root/build/libvxvector_kmeans.so"
   fi
 
   clang -std=c11 -Wall -Wextra -Werror -I "$project_root/include" \
     "$project_root/scripts/benchmark_data_path.c" -L "$project_root/build" \
-    -lvextor_kmeans -Wl,-rpath,"$project_root/build" \
+    -lvxvector_kmeans -Wl,-rpath,"$project_root/build" \
     -o "$project_root/build/benchmark_data_path"
 
   python3 "$project_root/scripts/write_build_info.py" --compiler "$compiler" \

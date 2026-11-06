@@ -6,8 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "vextor_data_path.h"
-#include "vextor_kmeans.h"
+#include "vxvector_data_path.h"
+#include "vxvector_kmeans.h"
 
 union allocation_header {
     max_align_t alignment;
@@ -45,7 +45,7 @@ static void tracked_free(void *pointer) {
 #undef malloc
 #undef free
 
-int32_t vextor_kmeans_v1(const float *points, int32_t rows, int32_t dims,
+int32_t vxvector_kmeans_v1(const float *points, int32_t rows, int32_t dims,
                          int32_t roots, int32_t leaves, int32_t sampling,
                          int32_t batch, int32_t iterations, int32_t restarts,
                          int32_t metric, int32_t spherical, int32_t seed,
@@ -70,7 +70,7 @@ struct source {
     float values[2];
 };
 
-static int32_t next_row(void *context, struct vextor_input_row *row) {
+static int32_t next_row(void *context, struct vxvector_input_row *row) {
     struct source *source = context;
     ++source->calls;
     if (source->fail)
@@ -79,7 +79,7 @@ static int32_t next_row(void *context, struct vextor_input_row *row) {
         return 0;
     source->values[0] = (float)source->position++;
     source->values[1] = 0.0f;
-    *row = (struct vextor_input_row){source->values, 2, VEXTOR_INPUT_VECTOR};
+    *row = (struct vxvector_input_row){source->values, 2, VXVECTOR_INPUT_VECTOR};
     return 1;
 }
 
@@ -90,19 +90,19 @@ static void reset(void) {
 }
 
 int main(void) {
-    struct vextor_cpu_options o = {
+    struct vxvector_cpu_options o = {
         .row_count = 2000, .memory_budget_bytes = UINT64_MAX, .dims = 2,
         .leaf_count = 2, .sampling_factor = 3, .batch_size = 4,
         .iterations = 4, .restarts = 2, .seed = 42
     };
-    struct vextor_cpu_plan plan;
-    struct vextor_data_error error;
-    struct vextor_cpu_result result;
-    assert(vextor_plan_cpu_v1(&o, &plan, &error) == VEXTOR_DATA_OK);
+    struct vxvector_cpu_plan plan;
+    struct vxvector_data_error error;
+    struct vxvector_cpu_result result;
+    assert(vxvector_plan_cpu_v1(&o, &plan, &error) == VXVECTOR_DATA_OK);
     assert(allocation_calls == 0);
     o.memory_budget_bytes = plan.buffer_bytes - 1;
     struct source source = {.count = o.row_count};
-    assert(vextor_run_cpu_v1(&o, next_row, &source, &result, &error) == VEXTOR_DATA_BUDGET);
+    assert(vxvector_run_cpu_v1(&o, next_row, &source, &result, &error) == VXVECTOR_DATA_BUDGET);
     assert(allocation_calls == 0 && source.calls == 0 && kmeans_calls == 0);
     o.memory_budget_bytes = plan.buffer_bytes;
 
@@ -110,13 +110,13 @@ int main(void) {
         reset();
         o.row_count = large ? 200000 : 2000;
         source = (struct source){.count = o.row_count};
-        assert(vextor_run_cpu_v1(&o, next_row, &source, &result, &error) == VEXTOR_DATA_OK);
+        assert(vxvector_run_cpu_v1(&o, next_row, &source, &result, &error) == VXVECTOR_DATA_OK);
         assert(peak_bytes == plan.buffer_bytes);
         assert(result.plan.sample_count == 6);
         assert(source.calls == o.row_count + 1 && kmeans_calls == 1);
         for (uint64_t i = 0; i < result.plan.sample_count; ++i)
             assert(result.sample[2 * i] == (float)result.sample_rows[i]);
-        vextor_free_cpu_result_v1(&result);
+        vxvector_free_cpu_result_v1(&result);
         assert(live_bytes == 0);
     }
     size_t successful_allocations = allocation_calls;
@@ -124,20 +124,20 @@ int main(void) {
         reset();
         fail_allocation = allocation;
         source = (struct source){.count = o.row_count};
-        assert(vextor_run_cpu_v1(&o, next_row, &source, &result, &error) == VEXTOR_DATA_MEMORY);
+        assert(vxvector_run_cpu_v1(&o, next_row, &source, &result, &error) == VXVECTOR_DATA_MEMORY);
         assert(live_bytes == 0 && source.calls == 0 && kmeans_calls == 0);
         assert(result.sample == NULL && result.nodes == NULL);
     }
     reset();
     source = (struct source){.count = o.row_count, .fail = 1};
-    assert(vextor_run_cpu_v1(&o, next_row, &source, &result, &error) == VEXTOR_DATA_SOURCE);
+    assert(vxvector_run_cpu_v1(&o, next_row, &source, &result, &error) == VXVECTOR_DATA_SOURCE);
     assert(live_bytes == 0 && kmeans_calls == 0);
     for (int nonfinite = 0; nonfinite < 2; ++nonfinite) {
         reset();
         kmeans_status = nonfinite ? 0 : 1;
         nonfinite_output = nonfinite;
         source = (struct source){.count = o.row_count};
-        assert(vextor_run_cpu_v1(&o, next_row, &source, &result, &error) == VEXTOR_DATA_KMEANS);
+        assert(vxvector_run_cpu_v1(&o, next_row, &source, &result, &error) == VXVECTOR_DATA_KMEANS);
         assert(live_bytes == 0 && kmeans_calls == 1);
         assert(result.sample == NULL && result.nodes == NULL);
     }
@@ -147,9 +147,9 @@ int main(void) {
     o.leaf_count = INT32_MAX - 1;
     o.sampling_factor = 1;
     source = (struct source){.count = o.row_count};
-    assert(vextor_run_cpu_v1(&o, next_row, &source, &result, &error) == VEXTOR_DATA_OVERFLOW);
+    assert(vxvector_run_cpu_v1(&o, next_row, &source, &result, &error) == VXVECTOR_DATA_OVERFLOW);
     assert(allocation_calls == 0 && source.calls == 0 && kmeans_calls == 0);
-    vextor_free_cpu_result_v1(&result);
+    vxvector_free_cpu_result_v1(&result);
     puts("Data path allocation, bounded-memory, and failure checks passed");
     return 0;
 }

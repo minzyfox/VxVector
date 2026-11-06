@@ -1,5 +1,7 @@
 # Vx main update: November 4, 2026
 
+> Historical validation record. Names and runtime identifiers below reflect the installation before the VxVector rename. See the [current setup](../README.md).
+
 ## Compiler revision
 
 The previous Linux worker and CI used Vx `41e73e48191069ea4a026fbab473126759e5587c`.

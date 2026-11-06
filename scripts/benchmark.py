@@ -22,8 +22,8 @@ def main():
 
     project = Path(__file__).resolve().parents[1]
     suffix = ".dylib" if sys.platform == "darwin" else ".so"
-    library = ctypes.CDLL(os.fspath(project / "build" / f"libvextor_kmeans{suffix}"))
-    run = library.vextor_kmeans_v1
+    library = ctypes.CDLL(os.fspath(project / "build" / f"libvxvector_kmeans{suffix}"))
+    run = library.vxvector_kmeans_v1
     float_ptr = ctypes.POINTER(ctypes.c_float)
     int_ptr = ctypes.POINTER(ctypes.c_int32)
     run.argtypes = ([float_ptr] + [ctypes.c_int32] * 11
@@ -50,7 +50,7 @@ def main():
                  current, sums, counts)
     seconds = time.perf_counter() - start
     if status != 0:
-        raise RuntimeError(f"vextor_kmeans_v1 returned {status}")
+        raise RuntimeError(f"vxvector_kmeans_v1 returned {status}")
     print(f"rows={rows} dims={dims} leaves={leaves} seconds={seconds:.4f} "
           f"rows_per_second={rows / seconds:.1f}")
 

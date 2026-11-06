@@ -11,14 +11,15 @@ import uuid
 
 def parse_captures(text):
     # PostgreSQL json_agg can pretty-print array elements onto multiple lines.
+    # Accept the previous marker when replaying historical evidence.
     decoder = json.JSONDecoder()
     return [decoder.raw_decode(text[match.end():])[0]
-            for match in re.finditer(r'(?m)^(?:NOTICE:\s*)?VEXTOR_CENTROIDS ', text)]
+            for match in re.finditer(r'(?m)^(?:NOTICE:\s*)?(?:VXVECTOR|VEXTOR)_CENTROIDS ', text)]
 
 
 def reference_build(container):
     command = ['docker', 'exec', container]
-    result = subprocess.run(command + ['cat', '/usr/local/share/vextor-objectives/reference-build.json'],
+    result = subprocess.run(command + ['cat', '/usr/local/share/vxvector-objectives/reference-build.json'],
                             capture_output=True, text=True)
     if result.returncode:
         raise AssertionError('Centroid capture requires the isolated objective-reference image')
@@ -28,20 +29,20 @@ def reference_build(container):
     actual = subprocess.check_output(command + ['sha256sum', '/usr/lib/postgresql/17/lib/vchord.so'], text=True).split()[0]
     if actual != metadata['library_sha256']:
         raise AssertionError('Instrumented VectorChord library differs from its build manifest')
-    worker = json.loads(subprocess.check_output(command + ['cat', '/usr/local/libexec/vextor/vx-build-info.json'], text=True))
+    worker = json.loads(subprocess.check_output(command + ['cat', '/usr/local/libexec/vxvector/vx-build-info.json'], text=True))
     expected_pin = (Path(__file__).resolve().parents[1] / 'vx-revision.txt').read_text().strip()
     if worker['vx_revision'] != expected_pin:
-        raise AssertionError('Reference image does not use the current Vextor worker pin')
+        raise AssertionError('Reference image does not use the current VxVector worker pin')
     metadata['vx_build'] = worker
     return metadata
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--container', default=os.environ.get('VEXTOR_POSTGRES_CONTAINER', 'vextor-objectives-postgres-1'))
+    parser.add_argument('--container', default=os.environ.get('VXVECTOR_POSTGRES_CONTAINER', 'vxvector-objectives-postgres-1'))
     args = parser.parse_args()
     metadata = reference_build(args.container)
-    schema = 'vextor_capture_' + uuid.uuid4().hex[:12]
+    schema = 'vxvector_capture_' + uuid.uuid4().hex[:12]
     build = f"""CREATE INDEX candidate ON {schema}.items USING vchordrq(features vector_l2_ops)
         WITH(options=$options$[build.internal]
         lists = [1]
@@ -57,18 +58,18 @@ def main():
         CREATE TABLE {schema}.items(features vector(2));
         INSERT INTO {schema}.items VALUES ('[0,0]'),('[2,0]');
         ANALYZE {schema}.items;
-        SELECT set_config('vextor_test.case','known_mean',true);
+        SELECT set_config('vxvector_test.case','known_mean',true);
         {build}
         DROP INDEX {schema}.candidate;
-        SET LOCAL vextor_test.capture_centroids = 'off';
+        SET LOCAL vxvector_test.capture_centroids = 'off';
         {build}
         DROP INDEX {schema}.candidate;
-        SET LOCAL vextor_test.capture_centroids = 'on';
+        SET LOCAL vxvector_test.capture_centroids = 'on';
         {build}
         ROLLBACK;
     """
     result = subprocess.run(['docker', 'exec', '-i', args.container, 'psql', '-X', '-At',
-                             '-v', 'ON_ERROR_STOP=1', '-U', 'vextor', '-d', 'vextor'],
+                             '-v', 'ON_ERROR_STOP=1', '-U', 'vxvector', '-d', 'vxvector'],
                             input=sql, capture_output=True, text=True)
     if result.returncode:
         raise AssertionError(result.stdout + result.stderr)

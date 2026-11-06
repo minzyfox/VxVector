@@ -17,20 +17,20 @@ ANCHOR = '''            let result =
 '''
 HOOK = r'''            // Test-only export of unrotated centroids. The normal index path is unchanged.
             if pgrx::Spi::get_one::<String>(
-                "SELECT current_setting('vextor_test.capture_centroids', true)",
+                "SELECT current_setting('vxvector_test.capture_centroids', true)",
             )
             .expect("read centroid capture setting")
             .as_deref()
                 == Some("on")
             {
                 let case = pgrx::Spi::get_one::<String>(
-                    "SELECT current_setting('vextor_test.case', true)",
+                    "SELECT current_setting('vxvector_test.case', true)",
                 )
                 .expect("read centroid capture case")
                 .expect("centroid capture requires a case label");
                 let levels = result.iter().map(|level| &level.centroids).collect::<Vec<_>>();
                 pgrx::notice!(
-                    "VEXTOR_CENTROIDS {{\"trainer\":\"internal\",\"case\":{:?},\"levels\":{:?}}}",
+                    "VXVECTOR_CENTROIDS {{\"trainer\":\"internal\",\"case\":{:?},\"levels\":{:?}}}",
                     case,
                     levels,
                 );

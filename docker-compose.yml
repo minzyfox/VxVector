@@ -1,23 +1,23 @@
-name: vextor
+name: vxvector
 
 services:
   postgres:
-    image: ${VEXTOR_POSTGRES_IMAGE:-vextor-postgres:17-vextor}
+    image: ${VXVECTOR_POSTGRES_IMAGE:-vxvector-postgres:17-vxvector}
     build:
       context: .
       dockerfile: docker/Dockerfile.extension
       target: runtime
     environment:
-      POSTGRES_USER: vextor
-      POSTGRES_DB: vextor
-      POSTGRES_PASSWORD: ${VEXTOR_POSTGRES_PASSWORD:?Set VEXTOR_POSTGRES_PASSWORD in .env}
+      POSTGRES_USER: vxvector
+      POSTGRES_DB: vxvector
+      POSTGRES_PASSWORD: ${VXVECTOR_POSTGRES_PASSWORD:?Set VXVECTOR_POSTGRES_PASSWORD in .env}
     ports:
-      - "127.0.0.1:${VEXTOR_POSTGRES_PORT:-15432}:5432"
+      - "127.0.0.1:${VXVECTOR_POSTGRES_PORT:-15432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     shm_size: 256mb
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U vextor -d vextor"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U vxvector -d vxvector"]
       interval: 5s
       timeout: 5s
       retries: 20

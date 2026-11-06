@@ -12,14 +12,14 @@ compose() {
 }
 
 postgres_exec() {
-  if [[ -n "${VEXTOR_POSTGRES_CONTAINER:-}" ]]; then
-    docker exec -i "$VEXTOR_POSTGRES_CONTAINER" "$@"
+  if [[ -n "${VXVECTOR_POSTGRES_CONTAINER:-}" ]]; then
+    docker exec -i "$VXVECTOR_POSTGRES_CONTAINER" "$@"
   else
     compose exec -T postgres "$@"
   fi
 }
 
-postgres_exec psql -X -v ON_ERROR_STOP=1 -U vextor -d vextor \
+postgres_exec psql -X -v ON_ERROR_STOP=1 -U vxvector -d vxvector \
   < "$project_root/tests/postgres_image.sql"
 postgres_exec sh -c 'cc --version && clang --version && cargo --version && rustc --version && test -f "$(pg_config --includedir-server)/postgres.h"'
 

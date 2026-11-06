@@ -5,13 +5,13 @@ GPU acceleration will come later. This milestone requires neither PostgreSQL nor
 
 ## Implemented API
 
-`include/vextor_data_path.h` defines the host adapter alongside the existing Vx array ABI.
+`include/vxvector_data_path.h` defines the host adapter alongside the existing Vx array ABI.
 `src/data_path.c` implements source reading, sampling, allocation checks, and timing.
 The clustering algorithm remains in `src/kmeans.vx`.
 
-- `vextor_plan_cpu_v1` validates a request and calculates all adapter buffer sizes without allocating memory.
-- `vextor_run_cpu_v1` reads the source, collects a sample, and calls `vextor_kmeans_v1` once.
-- `vextor_free_cpu_result_v1` releases the result and clears its pointers. Releasing an empty result is safe.
+- `vxvector_plan_cpu_v1` validates a request and calculates all adapter buffer sizes without allocating memory.
+- `vxvector_run_cpu_v1` reads the source, collects a sample, and calls `vxvector_kmeans_v1` once.
+- `vxvector_free_cpu_result_v1` releases the result and clears its pointers. Releasing an empty result is safe.
 
 The reader returns one dense float32 vector, EOF, or an error per call.
 The adapter packs rows into contiguous row-major batches, capped by `batch_size` and the source count.

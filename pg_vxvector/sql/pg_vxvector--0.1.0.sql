@@ -1,6 +1,6 @@
-CREATE SCHEMA vextor;
+CREATE SCHEMA vxvector;
 
-CREATE FUNCTION vextor.create_vector_index(
+CREATE FUNCTION vxvector.create_vector_index(
     source_table regclass,
     column_name text,
     lists integer[],

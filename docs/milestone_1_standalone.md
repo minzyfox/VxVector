@@ -4,7 +4,7 @@ Checked on 2026-10-22 on Apple M4 Pro with the local Vx compiler.
 
 ## Implemented
 
-`src/kmeans.vx` exports `vextor_kmeans_v1` through a C ABI. The caller supplies
+`src/kmeans.vx` exports `vxvector_kmeans_v1` through a C ABI. The caller supplies
 row-major float32 points, centroid output, assignments, and scratch buffers.
 The header documents buffer sizes and status codes. No Postgres dependency is
 needed. The implementation uses squared L2, negative inner product, or cosine

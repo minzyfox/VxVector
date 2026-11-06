@@ -17,12 +17,12 @@ MIN_RECALL = 0.95
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--container', default=os.environ.get('VEXTOR_POSTGRES_CONTAINER', 'vextor-postgres-1'))
+    parser.add_argument('--container', default=os.environ.get('VXVECTOR_POSTGRES_CONTAINER', 'vxvector-postgres-1'))
     parser.add_argument('--epsilon', type=float, default=4.0, help='VectorChord reranking quality (0..4)')
     args = parser.parse_args()
     if not 0 <= args.epsilon <= 4:
         parser.error('epsilon must be between 0 and 4')
-    schema = 'vextor_m4_' + uuid.uuid4().hex[:12]
+    schema = 'vxvector_m4_' + uuid.uuid4().hex[:12]
     statements = [f"""
         BEGIN ISOLATION LEVEL REPEATABLE READ;
         SET LOCAL statement_timeout = '120s';
@@ -55,7 +55,7 @@ def main():
                 tag = f'{metric}_{roots}_{dims}'
                 spherical = 'false' if metric == 'l2' else 'true'
                 statements.append(f"""
-                  SELECT vextor.create_vector_index('{schema}.source_{dims}', 'features', ARRAY[{lists}],
+                  SELECT vxvector.create_vector_index('{schema}.source_{dims}', 'features', ARRAY[{lists}],
                     sampling_factor=>{factor}, batch_size=>{batch}, kmeans_iterations=>8,
                     kmeans_nredo=>{restarts}, distance_operator=>'{metric}',
                     spherical_centroids=>{spherical}, seed=>{seed},
@@ -103,7 +103,7 @@ def main():
                       EXECUTE format('EXPLAIN (FORMAT JSON) SELECT id FROM {schema}.source_{dims}
                         ORDER BY features {operator} %L::vector LIMIT 10', query) INTO plan;
                       IF position('idx_{tag}' IN plan::text) = 0 THEN
-                        RAISE EXCEPTION 'Recall query did not use the Vextor index: %', plan;
+                        RAISE EXCEPTION 'Recall query did not use the VxVector index: %', plan;
                       END IF;
                       EXECUTE format('SELECT array_agg(id ORDER BY distance,id),
                         array_agg(distance ORDER BY distance,id) FROM
@@ -141,14 +141,14 @@ def main():
       DO $budget$
       DECLARE small jsonb; large jsonb; rejected boolean := false;
       BEGIN
-        SELECT vextor.create_vector_index('{schema}.source_128','features',ARRAY[4],
+        SELECT vxvector.create_vector_index('{schema}.source_128','features',ARRAY[4],
           sampling_factor=>8,batch_size=>13,skip_index_build=>true,
           centroid_table=>'budget_small') INTO small;
         INSERT INTO {schema}.source_128
           SELECT i, ARRAY(SELECT (CASE WHEN d = i % 4 + 1 THEN 3.0 ELSE 0.0 END
             + sin(i * 13.0 + d * 7.0) * 0.1)::real FROM generate_series(1,128) d)::vector
           FROM generate_series(257,8192) i;
-        SELECT vextor.create_vector_index('{schema}.source_128','features',ARRAY[4],
+        SELECT vxvector.create_vector_index('{schema}.source_128','features',ARRAY[4],
           sampling_factor=>8,batch_size=>13,skip_index_build=>true,
           centroid_table=>'budget_large') INTO large;
         IF (small->>'rows')::int <> 256 OR (large->>'rows')::int <> 8192 OR
@@ -157,7 +157,7 @@ def main():
           RAISE EXCEPTION 'Bounded SQL sampling metadata changed with source size: %, %', small,large;
         END IF;
         BEGIN
-          PERFORM vextor.create_vector_index('{schema}.source_128','features',ARRAY[4],
+          PERFORM vxvector.create_vector_index('{schema}.source_128','features',ARRAY[4],
             memory_budget_bytes=>1,skip_index_build=>true,centroid_table=>'budget_rejected');
         EXCEPTION WHEN OTHERS THEN
           IF SQLERRM NOT LIKE '%memory budget%' THEN RAISE; END IF;
@@ -171,7 +171,7 @@ def main():
       ROLLBACK;
     """)
     result = subprocess.run(['docker', 'exec', '-i', args.container, 'psql', '-X', '-At',
-                             '-v', 'ON_ERROR_STOP=1', '-U', 'vextor', '-d', 'vextor'],
+                             '-v', 'ON_ERROR_STOP=1', '-U', 'vxvector', '-d', 'vxvector'],
                             input='\n'.join(statements), text=True, capture_output=True)
     print(json.dumps(dict(client_platform=platform.platform())), flush=True)
     print(result.stdout, end='', flush=True)

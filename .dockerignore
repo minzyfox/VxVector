@@ -1,10 +1,10 @@
 *
 !docker/
 !docker/Dockerfile.extension
-!docker/020-vextor.sql
-!pg_vextor/
-!pg_vextor/**
-pg_vextor/target/
+!docker/020-vxvector.sql
+!pg_vxvector/
+!pg_vxvector/**
+pg_vxvector/target/
 !src/
 !src/*.c
 !include/
@@ -14,7 +14,7 @@ build/*
 !build/linux/
 build/linux/*
 !build/linux/kmeans.o
-!build/linux/libpg_vextor.so
+!build/linux/libpg_vxvector.so
 
 !vx-revision.txt
 !build/linux/vx-build-info.json

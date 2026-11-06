@@ -69,7 +69,7 @@ def check_results(records, seeds, queries):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--datasets', type=Path, default=Path('build/datasets'))
-    parser.add_argument('--container', default=os.environ.get('VEXTOR_POSTGRES_CONTAINER', 'vextor-postgres-1'))
+    parser.add_argument('--container', default=os.environ.get('VXVECTOR_POSTGRES_CONTAINER', 'vxvector-postgres-1'))
     parser.add_argument('--rows', type=int, default=8192)
     parser.add_argument('--queries', type=int, default=32)
     parser.add_argument('--seeds', type=int, nargs='+', default=[0, 17])
@@ -80,7 +80,7 @@ def main():
         parser.error('Use at least 128 rows, positive queries, and distinct nonnegative seeds')
     if args.capture_objectives:
         print(json.dumps(dict(objective_reference=reference_build(args.container))), flush=True)
-    schema = 'vextor_real_' + uuid.uuid4().hex[:12]
+    schema = 'vxvector_real_' + uuid.uuid4().hex[:12]
     sql = [f'''BEGIN ISOLATION LEVEL REPEATABLE READ;
       SET LOCAL statement_timeout = '300s'; SET LOCAL jit = off;
       SET LOCAL max_parallel_workers_per_gather = 0;
@@ -92,7 +92,7 @@ def main():
     ''']
     objective_cases = {}
     if args.capture_objectives:
-        sql.append("SET LOCAL client_min_messages = notice; SET LOCAL vextor_test.capture_centroids = 'on';")
+        sql.append("SET LOCAL client_min_messages = notice; SET LOCAL vxvector_test.capture_centroids = 'on';")
     print(json.dumps(dict(platform=platform.platform(), numpy=np.__version__, h5py=h5py.__version__,
                           rows=args.rows, queries=args.queries, seeds=args.seeds,
                           conservative_minimum=0.95, maximum_mean_recall_loss=0.05)), flush=True)
@@ -141,10 +141,10 @@ def main():
                                                      seed=seed, points=points)
                     for trainer in ('vx', 'internal'):
                         if args.capture_objectives:
-                            sql.append(f"SELECT set_config('vextor_test.case','{case}',true);")
+                            sql.append(f"SELECT set_config('vxvector_test.case','{case}',true);")
                         # Only one ANN index exists at a time, so the checked plan cannot choose its competitor.
                         if trainer == 'vx':
-                            build = f'''SELECT vextor.create_vector_index('{table}', 'features', ARRAY[{lists}],
+                            build = f'''SELECT vxvector.create_vector_index('{table}', 'features', ARRAY[{lists}],
                               sampling_factor=>40, batch_size=>127, kmeans_iterations=>10, kmeans_nredo=>1,
                               distance_operator=>'{metric}', spherical_centroids=>{spherical}, seed=>{seed},
                               centroid_table=>'centers', index_name=>'candidate');'''
@@ -165,7 +165,7 @@ def main():
                             if roots:
                                 levels.append(f'(SELECT json_agg(vector::real[] ORDER BY id) FROM {schema}.centers WHERE id BETWEEN 1 AND {roots})')
                             levels.append(f'(SELECT json_agg(vector::real[] ORDER BY id) FROM {schema}.centers WHERE id = 0)')
-                            sql.append(f"SELECT 'VEXTOR_CENTROIDS ' || json_build_object('trainer','vx','case','{case}', 'levels',json_build_array({','.join(levels)}))::text;")
+                            sql.append(f"SELECT 'VXVECTOR_CENTROIDS ' || json_build_object('trainer','vx','case','{case}', 'levels',json_build_array({','.join(levels)}))::text;")
                         for probes, epsilon, conservative in settings:
                             sql.append(f'''SET LOCAL vchordrq.probes = '{probes}';
                               SET LOCAL vchordrq.epsilon = '{epsilon}';
@@ -212,7 +212,7 @@ def main():
         sql.append(f'DROP TABLE {table}; DROP TABLE {schema}.queries;')
     sql.append('ROLLBACK;')
     result = subprocess.run(['docker', 'exec', '-i', args.container, 'psql', '-X', '-At',
-                             '-v', 'ON_ERROR_STOP=1', '-U', 'vextor', '-d', 'vextor'],
+                             '-v', 'ON_ERROR_STOP=1', '-U', 'vxvector', '-d', 'vxvector'],
                             input='\n'.join(sql), text=True, capture_output=True)
     print(result.stdout, end='', flush=True)
     print(result.stderr, end='', flush=True)

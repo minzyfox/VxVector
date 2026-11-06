@@ -1,5 +1,5 @@
-#ifndef VEXTOR_KMEANS_H
-#define VEXTOR_KMEANS_H
+#ifndef VXVECTOR_KMEANS_H
+#define VXVECTOR_KMEANS_H
 
 #include <stdint.h>
 
@@ -7,10 +7,10 @@
 extern "C" {
 #endif
 
-enum vextor_metric {
-    VEXTOR_L2 = 0,
-    VEXTOR_INNER_PRODUCT = 1,
-    VEXTOR_COSINE = 2
+enum vxvector_metric {
+    VXVECTOR_L2 = 0,
+    VXVECTOR_INNER_PRODUCT = 1,
+    VXVECTOR_COSINE = 2
 };
 
 /*
@@ -37,7 +37,7 @@ enum vextor_metric {
  * Input vectors must be finite. The caller must provide valid capacities.
  * The function cannot inspect those capacities.
  */
-int32_t vextor_kmeans_v1(const float *points, int32_t rows, int32_t dims,
+int32_t vxvector_kmeans_v1(const float *points, int32_t rows, int32_t dims,
                      int32_t root_count, int32_t leaf_count,
                      int32_t sampling_factor, int32_t batch_size,
                      int32_t iterations, int32_t restarts, int32_t metric,

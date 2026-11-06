@@ -1,4 +1,4 @@
-#include "vextor_protocol.h"
+#include "vxvector_protocol.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -27,7 +27,7 @@ struct row_reader {
     float *values;
 };
 
-static int32_t next_row(void *context, struct vextor_input_row *row) {
+static int32_t next_row(void *context, struct vxvector_input_row *row) {
     struct row_reader *reader = context;
     uint32_t dims;
     int status = transfer(STDIN_FILENO, &dims, sizeof(dims), 0);
@@ -37,30 +37,30 @@ static int32_t next_row(void *context, struct vextor_input_row *row) {
         return -1;
     if (transfer(STDIN_FILENO, reader->values, (size_t)dims * sizeof(float), 0) != 1)
         return -1;
-    *row = (struct vextor_input_row){reader->values, dims, VEXTOR_INPUT_VECTOR};
+    *row = (struct vxvector_input_row){reader->values, dims, VXVECTOR_INPUT_VECTOR};
     return 1;
 }
 
 int main(void) {
     signal(SIGPIPE, SIG_IGN);
-    struct vextor_worker_request request;
-    struct vextor_worker_reply reply = {0};
-    struct vextor_data_error error = {0};
-    struct vextor_cpu_plan plan;
+    struct vxvector_worker_request request;
+    struct vxvector_worker_reply reply = {0};
+    struct vxvector_data_error error = {0};
+    struct vxvector_cpu_plan plan;
     if (transfer(STDIN_FILENO, &request, sizeof(request), 0) != 1 ||
-        request.magic != VEXTOR_WORKER_MAGIC) {
-        reply.status = VEXTOR_DATA_INVALID;
+        request.magic != VXVECTOR_WORKER_MAGIC) {
+        reply.status = VXVECTOR_DATA_INVALID;
         snprintf(reply.message, sizeof(reply.message), "Invalid or truncated worker request");
         transfer(STDOUT_FILENO, &reply, sizeof(reply), 1);
         return 1;
     }
     uint64_t row_bytes = request.options.dims > 0 ? (uint64_t)request.options.dims * sizeof(float) : 0;
     if (request.options.memory_budget_bytes <= row_bytes) {
-        reply.status = VEXTOR_DATA_BUDGET;
+        reply.status = VXVECTOR_DATA_BUDGET;
         snprintf(reply.message, sizeof(reply.message), "Memory budget cannot hold the worker input row");
     } else {
         request.options.memory_budget_bytes -= row_bytes;
-        reply.status = vextor_plan_cpu_v1(&request.options, &plan, &error);
+        reply.status = vxvector_plan_cpu_v1(&request.options, &plan, &error);
         snprintf(reply.message, sizeof(reply.message), "%s", error.message);
     }
     if (reply.status != 0) {
@@ -75,13 +75,13 @@ int main(void) {
         return 1;
     struct row_reader reader = {(uint32_t)request.options.dims, malloc((size_t)row_bytes)};
     if (!reader.values) {
-        reply.status = VEXTOR_DATA_MEMORY;
+        reply.status = VXVECTOR_DATA_MEMORY;
         snprintf(reply.message, sizeof(reply.message), "Could not allocate the worker input row");
         transfer(STDOUT_FILENO, &reply, sizeof(reply), 1);
         return 1;
     }
-    struct vextor_cpu_result result;
-    reply.status = vextor_run_cpu_v1(&request.options, next_row, &reader, &result, &error);
+    struct vxvector_cpu_result result;
+    reply.status = vxvector_run_cpu_v1(&request.options, next_row, &reader, &result, &error);
     free(reader.values);
     snprintf(reply.message, sizeof(reply.message), "%s", error.message);
     if (reply.status != 0) {
@@ -95,6 +95,6 @@ int main(void) {
              transfer(STDOUT_FILENO, result.nodes,
                       (size_t)reply.nodes * (size_t)reply.dims * sizeof(float), 1) == 1 &&
              transfer(STDOUT_FILENO, result.parents, (size_t)reply.nodes * sizeof(int32_t), 1) == 1;
-    vextor_free_cpu_result_v1(&result);
+    vxvector_free_cpu_result_v1(&result);
     return ok ? 0 : 1;
 }

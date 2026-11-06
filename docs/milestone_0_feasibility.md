@@ -82,7 +82,7 @@ The nodes form a tree whose leaves have the same depth. pgpu currently creates
 as `id = 0, parent = NULL`. Flat centroids have parent `0`. For two levels, root
 centroids have parent `0`, and leaves name their root centroid's ID. pgpu assigns
 IDs itself rather than relying on insertion order. Its table DDL does not declare
-the constraints that VectorChord documents, so Vextor should declare `id` unique
+the constraints that VectorChord documents, so VxVector should declare `id` unique
 and the non-null columns explicitly after validating compatibility.
 
 The public VectorChord page has a contradiction: its example inserts a root
@@ -101,11 +101,11 @@ table = 'public.example_centroids'
 ```
 
 The source currently hard-codes the indexed column name `embedding` in its
-`CREATE INDEX` statement despite accepting `column_name`. Vextor should use
+`CREATE INDEX` statement despite accepting `column_name`. VxVector should use
 the supplied column name and test a column with another name. `skip_index_build`
 stops after writing the centroid table. The 2.1.0 source also adds a
 `random_sampling` argument with default `true` that the README's function
-signature does not list. Keep Vextor's public API choice explicit when the
+signature does not list. Keep VxVector's public API choice explicit when the
 Postgres wrapper is designed.
 
 Sources: [pgpu centroid writer](https://github.com/EnterpriseDB/pgpu/blob/b39cc5e3fa49efb673c524d722ea7c812228bc7e/vectorchord-indexing/src/centroids_table.rs),

@@ -1,6 +1,6 @@
 # PostgreSQL development image
 
-The Vextor image uses PostgreSQL 17 with pgvector and VectorChord 1.1.1.
+The VxVector image uses PostgreSQL 17 with pgvector and VectorChord 1.1.1.
 The upstream VectorChord image is pinned by manifest digest in `docker/postgres/Dockerfile`.
 The development stage adds C/Clang, libclang, PostgreSQL server headers, Python, and Rust 1.90.0.
 The base image provides build tools. The complete image adds the pgrx extension and separate Linux Vx CPU worker.
@@ -16,7 +16,7 @@ export DOCKER_CONTEXT=colima
 ```
 
 Create `.env` from `.env.example` when `.env` does not already exist.
-Set `VEXTOR_POSTGRES_PASSWORD` to a local password. Git ignores `.env`.
+Set `VXVECTOR_POSTGRES_PASSWORD` to a local password. Git ignores `.env`.
 The initial setup generated a password in this machine's `.env`.
 
 ```sh
@@ -29,22 +29,22 @@ docker-compose up -d --no-build --wait
 
 Use `docker compose` instead of `docker-compose` when the Compose plugin is installed.
 The scripts support either form. The build script also supports Docker without Buildx.
-The Compose service is named `postgres` and uses `vextor-postgres:17-vextor`.
-It initializes a separate `vextor_postgres_data` volume and a database/user named `vextor`.
-The server preloads `vchord`, and first initialization creates `vector`, `vchord`, and `pg_vextor` extensions.
+The Compose service is named `postgres` and uses `vxvector-postgres:17-vxvector`.
+It initializes a separate `vxvector_postgres_data` volume and a database/user named `vxvector`.
+The server preloads `vchord`, and first initialization creates `vector`, `vchord`, and `pg_vxvector` extensions.
 Initialization scripts run only on a fresh database volume.
 
 Connect at `127.0.0.1:15432`, or use the client inside the container:
 
 ```sh
-docker-compose exec postgres psql -U vextor -d vextor
+docker-compose exec postgres psql -U vxvector -d vxvector
 ```
 
 The existing database on port 5432 uses a separate container and volume.
-The Vextor service does not mount that volume or change that database.
-The default port can be changed with `VEXTOR_POSTGRES_PORT` in `.env`.
+The VxVector service does not mount that volume or change that database.
+The default port can be changed with `VXVECTOR_POSTGRES_PORT` in `.env`.
 
-Stop the Vextor service while retaining its database:
+Stop the VxVector service while retaining its database:
 
 ```sh
 docker-compose down
@@ -67,7 +67,7 @@ See [M3 checks](milestone_3_cpu_integration.md) for the CPU worker and SQL integ
 Validated on 2026-10-26 with linux/amd64 Colima: PostgreSQL 17.11, pgvector 0.8.2,
 VectorChord 1.1.1, and Rust/Cargo 1.90.0. The development package installation updates the base server from 17.9 to 17.11.
 See [raw validation evidence](evidence/postgres_image_2026-10-26.txt).
-The complete image includes the Vextor worker and `pg_vextor` 0.1.0.
+The complete image includes the VxVector worker and `pg_vxvector` 0.1.0.
 The Linux Vx compiler remains in its build container. The `cargo-pgrx` CLI is not required by the current build scripts.
 
 ## Known Colima DNS issue

@@ -8,7 +8,7 @@ enable GPU execution, then compare performance against cuVS.
 ## Goal and scope
 
 Build a Vx k-means implementation for VectorChord's external build, wrapped in a pgpu-style Postgres function.
-Develop Vextor and Vx together. Application kernels should expose compiler and standard-library gaps as each stage progresses.
+Develop VxVector and Vx together. Application kernels should expose compiler and standard-library gaps as each stage progresses.
 The remaining work follows this order:
 
 1. End-to-end CPU tests and correctness validation (M4).
@@ -162,11 +162,11 @@ Collect timings for diagnosis and repeatability. The cuVS performance comparison
 - [x] Extend known-answer synthetic checks with unequal-norm distributions and real GloVe-25/SIFT-128 subsets. Record source files and selected-array hashes.
 - [x] Supply exactly the same float32 sample to both implementations. Disable additional reference-library subsampling or match it explicitly.
 - [x] Match the distance metric, input normalization, spherical-centroid behavior, iterations, restarts, and stopping rules. Record differences that cannot be matched.
-- [x] Address initialization explicitly. The current Vextor API accepts a seed, not initial centroids; equal seeds across libraries do not imply equal initialization.
+- [x] Address initialization explicitly. The current VxVector API accepts a seed, not initial centroids; equal seeds across libraries do not imply equal initialization.
 - [x] Reconstruct Vx sample ordering and initialization for strict Faiss comparisons. Supply identical initial centroids to Faiss. No additional public initialization API is needed for these fixtures.
 - [x] Match centroids up to permutation before comparing coordinates and assignments. Handle equal-distance ties explicitly.
 - [x] Recompute clustering objectives independently from the returned centroids. Compare objective values, assignments, and centroids using declared numerical tolerances.
-- [x] Validate the centroid tree separately: parent assignments, equal leaf depth, node counts, dimensions, and normalization. Reproduce Vextor's leaves-first hierarchy rather than assuming another hierarchical algorithm is equivalent.
+- [x] Validate the centroid tree separately: parent assignments, equal leaf depth, node counts, dimensions, and normalization. Reproduce VxVector's leaves-first hierarchy rather than assuming another hierarchical algorithm is equivalent.
 - [x] Check empty clusters, duplicate vectors, and zero vectors separately. Align policies where possible and document expected differences.
 - [ ] Optionally cross-check L2 against [scikit-learn KMeans](https://scikit-learn.org/stable/modules/generated/sklearn.cluster.KMeans.html) with Lloyd's algorithm and explicit initialization.
 - [x] Compute exact nearest neighbors with PostgreSQL sequential scans on the same source snapshot. Verify the ground-truth query plan does not use an approximate index.
@@ -182,7 +182,7 @@ Collect timings for diagnosis and repeatability. The cuVS performance comparison
 
 Different centroid coordinates alone do not prove a defect. K-means can reach different local optima when initialization or algorithm policies differ.
 Strict differential checks require matched conditions. Broader quality comparisons must distinguish valid alternative solutions from correctness failures.
-Faiss spherical clustering is a reference only where its normalization and assignment semantics match Vextor's chosen mode.
+Faiss spherical clustering is a reference only where its normalization and assignment semantics match VxVector's chosen mode.
 
 ### Targeted compile-time verification in the Vx core
 
@@ -238,10 +238,10 @@ Exit criterion: verified SIMD execution and measured CPU improvement, while reta
 ## Milestone 6: GPU enablement and Vx enhancements
 
 Enable GPU execution after CPU correctness and SIMD validation.
-Develop the required compiler, runtime, and library support alongside the Vextor kernels.
+Develop the required compiler, runtime, and library support alongside the VxVector kernels.
 GPU availability does not block the preceding CPU stages.
 
-- [ ] Adopt and validate existing `across` execution for Vextor assignment and reduction loops. CPU block parallelism and an Apple GPU backend now exist upstream. Record application launch metadata and native execution evidence.
+- [ ] Adopt and validate existing `across` execution for VxVector assignment and reduction loops. CPU block parallelism and an Apple GPU backend now exist upstream. Record application launch metadata and native execution evidence.
 - [ ] Resolve tiled indexing, placed-buffer views, and pointer-offset gaps with focused Vx examples and compiler tests.
 - [ ] Add or improve device reductions and atomics where the chosen kernels require them.
 - [ ] Compare private partial sums, direct atomics, and assignment-grouped reductions, including sorting/index scratch and skewed cluster sizes. Audit reusable grouping and segmented-reduction support.
@@ -289,7 +289,7 @@ Exit criterion: reproducible performance and recall comparisons against cuVS, wi
 
 This assessment uses the [pinned Vx source](https://github.com/vx-lang/Vx/tree/ded616150af9a3372ad7e6badbc68ebb824c5c8b), updated November 5, 2026.
 See [the November 5 capability audit](vx_main_update_2026-11-05.md) for evidence and limits.
-Unchecked items describe remaining Vextor work. They do not imply that Vx lacks the feature.
+Unchecked items describe remaining VxVector work. They do not imply that Vx lacks the feature.
 Check existing APIs and backend support before proposing a language or library change.
 Being expressible is only the starting point: this project should also produce
 demonstrated Vx compiler and standard-library improvements in efficiency, safety,
@@ -299,7 +299,7 @@ resource control, and usability.
 
 The new pin is `ded616150af9a3372ad7e6badbc68ebb824c5c8b`.
 Upstream implementation and application adoption are separate milestones.
-The checks below establish specific capabilities, not completed Vextor GPU support.
+The checks below establish specific capabilities, not completed VxVector GPU support.
 
 - [x] Verify safe pointer requirements, pointer postconditions, and `!frees` tracking with existing Vx fixtures. Use these facilities when extending buffer contracts.
 - [x] Record a kernel baseline with `vxc --audit`. It reports 28 trusted pointer clauses at unsafe calls. Reducing those trust boundaries remains application work.
@@ -342,11 +342,11 @@ SOAR's immediate limitation is the VectorChord membership interface.
 
 The pinned source already provides dynamic tensor views, `matmul_into`, and packed
 CPU matrix kernels for f32/f64 in `std::tensor`. Backend examples cover caller-owned
-output buffers. This is source-level evidence, not validation of the Vextor flat-codegen
+output buffers. This is source-level evidence, not validation of the VxVector flat-codegen
 path or a performance result. The matrix kernel also allocates packing scratch space;
 caller-owned output alone does not make the operation allocation-free.
 
-- [ ] Validate existing tensor views and `matmul_into` with runtime-sized Vextor buffers, flat code generation, non-square tiles, transposed centroid layouts, and partial tiles. Local-variable tensor dimensions now pass an upstream flat-path execution fixture. Inspect application instructions and data copies.
+- [ ] Validate existing tensor views and `matmul_into` with runtime-sized VxVector buffers, flat code generation, non-square tiles, transposed centroid layouts, and partial tiles. Local-variable tensor dimensions now pass an upstream flat-path execution fixture. Inspect application instructions and data copies.
 - [ ] Compare existing tensor matrix kernels, direct Vx SIMD loops, and a coarse C-ABI BLAS call as experimental baselines. Record backend dispatch, linking, packing, scratch allocation, and thread counts. An FFI baseline does not establish Vx-generated kernel performance.
 - [ ] Audit f64 SIMD widening/reductions, accumulation precision, FMA, and reassociation for the established distance contract; current four-lane f32 helpers alone do not cover it.
 - [ ] Determine whether reusable caller-budgeted packing scratch and recoverable matrix-allocation errors need library APIs. Document concrete gaps after testing existing paths.
@@ -354,7 +354,7 @@ caller-owned output alone does not make the operation allocation-free.
 - [ ] For parallel assignment or centroid updates, evaluate existing CPU block workers (`VX_HOST_THREADS`), tensor-valued `tasks`, scheduling and reductions. Budget per-worker scratch and test deterministic merging and thread oversubscription before proposing concurrency changes.
 
 Research-specific capability work extends the M5 SIMD and memory audits. Recall
-validation inputs and checkpoint policy belong to Vextor's worker protocol; the
+validation inputs and checkpoint policy belong to VxVector's worker protocol; the
 remaining buffer, sampling, and division proofs remain separate M4 verifier questions.
 
 ### Concrete Vx compiler and standard-library improvement candidates
@@ -366,11 +366,11 @@ by itself establish that the language or library provides an efficient, safe int
 
 | Candidate | Evidence or application need | Proposed Vx outcome |
 | --- | --- | --- |
-| Reusable, caller-budgeted matrix scratch | The inspected matrix kernel allocates packing storage internally; Vextor needs reuse across iterations and explicit memory admission | A way to determine scratch requirements and supply/reuse workspace, with documented ownership, alignment, and aliasing rules |
+| Reusable, caller-budgeted matrix scratch | The inspected matrix kernel allocates packing storage internally; VxVector needs reuse across iterations and explicit memory admission | A way to determine scratch requirements and supply/reuse workspace, with documented ownership, alignment, and aliasing rules |
 | Recoverable matrix-allocation failure | The worker must report resource exhaustion; a caller-owned output buffer does not control internal packing allocations | A fallible matrix operation or workspace path with defined error returns and partial-output behavior |
 | Efficient SIMD over borrowed buffers | Distance loops need f32-to-f64 widening, reductions, masks, and tails; the existing four-lane f32 helpers do not establish that complete path | Safe or explicitly contracted buffer operations that keep intermediate vectors in registers and preserve the selected numerical behavior |
 | Stronger loop and pointer verification | The proof branch resolves branch-result facts, loop-result invariants, and nonlinear integer offsets | Validate remaining source-buffer, sampling, and foreign allocation obligations |
-| Dispatch and allocation observability | Performance comparisons must identify the actual backend, packing, copies, and scratch use | Reusable compiler/runtime diagnostics for the executed path and resource use, separated from Vextor's experiment metadata |
+| Dispatch and allocation observability | Performance comparisons must identify the actual backend, packing, copies, and scratch use | Reusable compiler/runtime diagnostics for the executed path and resource use, separated from VxVector's experiment metadata |
 | Producer/reduction fusion | A matrix-based assignment path could introduce distance intermediates absent from scalar `nearest()` | Validate existing fusion; extend lowering or provide a tiled distance-and-argmin primitive where needed |
 | Budgeted grouped reductions | Centroid updates combine integer-key grouping, indirect reads, and reductions | Reusable grouping/segmented sum-and-count operations with explicit workspace, precision, and reduction-order contracts |
 | Scheduling and backend resource feedback | Thread coarsening and batched runs trade data reuse against register pressure and occupancy | Audit scheduling controls and expose actual registers, spills, shared memory, and launch metadata |
@@ -389,7 +389,7 @@ by itself establish that the language or library provides an efficient, safe int
 
 Placement-aware scratch lifetimes and completion-safe asynchronous dispatch are
 larger compiler/runtime investigations for M6. Apple GPU completion and command batching
-now have upstream implementations. Portable overlap and Vextor integration remain incomplete;
+now have upstream implementations. Portable overlap and VxVector integration remain incomplete;
 these should extend that work rather than be presented as newly discovered features.
 New syntax is an option only where existing types, APIs, and contracts cannot express
 the required guarantees clearly. A useful outcome can instead be a better stdlib API,
@@ -402,8 +402,8 @@ stronger verifier reasoning, improved lowering, or observable resource behavior.
 - [ ] Identify missing device-wide reductions, sorting, top-k, or hash operations after the GPU capability audit. Keep local lane operations separate from whole-device requirements.
 - [ ] Define concrete ragged and offsets-plus-values workloads before proposing additional irregular-data support. Strings already exist. Assess device support and bounded storage separately.
 - [ ] Evaluate a columnar / Arrow-style buffer module for a concrete database workload. Specify ownership, validity, layout, and conversion costs. Keep this follow-up work separate from the current dense-vector path.
-- [ ] Document C ABI compatibility, versioning, error conventions, and upgrade checks. Basic C export already works through Vextor's versioned `v1` API. Separate Vextor's policy from guarantees supplied by the compiler.
-- [ ] Define recoverable allocation failure where the application needs it. Low-level `std::alloc` allocation functions return null, while `Vec` can panic on allocation failure. Vextor already checks explicit buffer budgets and returns adapter allocation errors. Broader collection/device recovery and total process-memory limits remain separate requirements.
+- [ ] Document C ABI compatibility, versioning, error conventions, and upgrade checks. Basic C export already works through VxVector's versioned `v1` API. Separate VxVector's policy from guarantees supplied by the compiler.
+- [ ] Define recoverable allocation failure where the application needs it. Low-level `std::alloc` allocation functions return null, while `Vec` can panic on allocation failure. VxVector already checks explicit buffer budgets and returns adapter allocation errors. Broader collection/device recovery and total process-memory limits remain separate requirements.
 - [ ] Evaluate the existing transfer-cost reasoning as an application planner input. It selects legal routes across declared edges. Compare its estimates with measured transfer costs before using them for runtime planning.
 
 Prioritize the M4 proof gaps, M5 SIMD requirements, and M6 GPU data path.
@@ -480,8 +480,8 @@ GPU performance against cuVS is a later question and does not block CPU integrat
 This dated assessment records research candidates and the reasons for their priority.
 The [November 5 audit](vx_main_update_2026-11-05.md) updates its Vx capability assumptions.
 It preserves the preceding roadmap and does not mark these candidates as implemented.
-The recommendations below come from comparing the cited sources with the current Vextor code.
-They are proposals for experiments, not measured Vextor improvements.
+The recommendations below come from comparing the cited sources with the current VxVector code.
+They are proposals for experiments, not measured VxVector improvements.
 M4 correctness remains the prerequisite for the optimization work.
 
 The strongest fits are faster exhaustive assignment, memory-efficient updates,
@@ -490,7 +490,7 @@ make fusion, work per thread, and composition across operations explicit experim
 Recall-based stopping needs validation inputs; SOAR requires index support beyond
 the current centroid-training interface. Distributed execution remains later research.
 
-| Candidate | Fit for Vextor | Recommended placement |
+| Candidate | Fit for VxVector | Recommended placement |
 | --- | --- | --- |
 | Tiled distance computation and centroid layouts | Directly targets the exhaustive assignment loop | Evaluate in M5 |
 | Flash-KMeans fused distance/argmin | Preserves the current streaming minimum while enabling tiled computation | CPU experiment in M5; GPU implementation in M6 |
@@ -527,7 +527,7 @@ The [data-path adapter](../src/data_path.c) trains on a bounded sample.
 Its assignments describe that sample, not the full source table.
 The [worker](../src/worker.c) returns centroid vectors and parents, together with
 status and timing metadata. It does not return the sample assignments.
-The [PostgreSQL bridge](../pg_vextor/src/bridge.c) writes the centroid table and
+The [PostgreSQL bridge](../pg_vxvector/src/bridge.c) writes the centroid table and
 invokes VectorChord through `build.external` to index the full source table.
 VectorChord owns index storage and query execution.
 
@@ -539,7 +539,7 @@ specialized centroid layout, and a threshold derived from the previous assignmen
 Its adaptive pruning is probabilistic, not a guarantee of identical assignments.
 See [SuperKMeans, section 3](https://arxiv.org/html/2603.20009v1#S3).
 
-For Vextor, first evaluate tiled exhaustive assignment: reuse point and centroid
+For VxVector, first evaluate tiled exhaustive assignment: reuse point and centroid
 batches through SIMD or matrix multiplication while considering every centroid.
 This establishes an optimized baseline before introducing probabilistic pruning.
 The current build scripts omit `-O3`. M5 already calls for optimized-build inspection
@@ -576,7 +576,7 @@ Its sort-inverse update sorts assignment indices, gathers points in logical grou
 order, and reduces locally. Segment results still use global atomic merges; the
 method reduces contention rather than eliminating every atomic operation.
 
-Vextor's scalar `nearest()` already keeps only the best distance/index. The adoption
+VxVector's scalar `nearest()` already keeps only the best distance/index. The adoption
 question is how to retain that property while increasing throughput. A separate GEMM
 and reduction may introduce intermediate storage that the current kernel avoids.
 
@@ -587,7 +587,7 @@ and reduction may introduce intermediate storage that the current kernel avoids.
 - [ ] Audit device-wide integer grouping, argsort, scans, and segmented reductions separately from local lane operations. Define workspace and allocation-error behavior.
 - [ ] Evaluate cache/shape-based tile selection against measured configurations. Record hardware, compiler, precision, and configuration in benchmark provenance.
 
-The paper's GPU results are not expected Vextor gains. Generalization to inner
+The paper's GPU results are not expected VxVector gains. Generalization to inner
 product and cosine requires metric-specific checks. Out-of-core overlap also needs
 validated completion and lifetime behavior in Vx; keep old centroids fixed until all
 chunks have contributed to an iteration's new sums and counts.
@@ -599,7 +599,7 @@ Exploration](https://onlinelibrary.wiley.com/doi/full/10.1002/cpe.70744),
 June 2, 2026, combines multiple points per thread, hierarchical local reductions,
 and concurrent evaluation of several K values. It discusses register spilling and
 partitions reductions when shared-memory demand exceeds capacity. Its low-dimensional,
-small-K Multi-K experiments do not establish performance for Vextor's embedding shapes.
+small-K Multi-K experiments do not establish performance for VxVector's embedding shapes.
 
 - [ ] Sweep points per thread and launch geometry with register/spill, shared-memory, occupancy, bandwidth, and time measurements. Include tail and synchronization checks.
 - [ ] Compare thread-local accumulation followed by block/global merging against other update strategies. Preserve the chosen reduction-order and overflow contract.
@@ -609,7 +609,7 @@ small-K Multi-K experiments do not establish performance for Vextor's embedding 
 - [ ] Select K using held-out recall versus query latency/candidate count, build time, and memory. Raw objectives across different K values are not a sufficient selection criterion.
 
 Batched restarts are the first application experiment because they reuse an existing
-Vextor operation. Classifier encoders, Gini-based screening, and XGBoost pruning target
+VxVector operation. Classifier encoders, Gini-based screening, and XGBoost pruning target
 a different quality objective and remain outside this vector-index work.
 
 ### Communication-aware composition across operations
@@ -629,7 +629,7 @@ vectors for the current VectorChord handoff. Borrow the composition principle.
 - [ ] Compare complete assignment/update plans including layout conversions, collectives, replication, synchronization, and peak per-device memory.
 - [ ] Audit existing Vx collectives and layout/partition representations with a small composed workload. Legal memory access alone does not establish compatible shard ownership or layout.
 - [ ] Investigate consumer-aware dispatch: whether a producer can retain a layout or fuse with its reduction instead of independently selecting each operation's fastest implementation.
-- [ ] Keep distributed scaling separate from the current single-device M6 exit criterion and from the later cuVS comparison. Do not transfer the paper's speedup claims to Vextor.
+- [ ] Keep distributed scaling separate from the current single-device M6 exit criterion and from the later cuVS comparison. Do not transfer the paper's speedup claims to VxVector.
 
 ### Residency-aware dispatch, provenance, and quality audits
 
@@ -651,7 +651,7 @@ SuperKMeans offers early termination when recall improvements fall below a thres
 with two iterations of patience. This requires queries and exact-neighbor ground
 truth. See [SuperKMeans, section 3.3](https://arxiv.org/html/2603.20009v1#S3.SS3).
 
-Vextor could evaluate partition recall inside the worker after each iteration.
+VxVector could evaluate partition recall inside the worker after each iteration.
 Partition recall measures whether the searched partitions contain the exact nearest
 neighbors. It does not require rebuilding a PostgreSQL index every iteration.
 The current worker receives a bounded training sample, so full-source validation
@@ -684,7 +684,7 @@ Balanced recursion improves scaling, although constructing centroid neighborhood
 can still involve quadratic work.
 See [Elastic's recursive clustering and refinement](https://www.elastic.co/search-labs/blog/k-means-for-vector-indices#breaking-the-scaling-barrier).
 
-This is a promising algorithmic experiment when Vextor targets thousands of leaves.
+This is a promising algorithmic experiment when VxVector targets thousands of leaves.
 It differs from the current leaves-first construction described above. Prioritize
 this experiment ahead of recall-based stopping when large leaf counts are the
 target workload. With sample size approximately `sampling_factor * leaf_count`,
@@ -737,7 +737,7 @@ high-dimensional clustering performance. Database timings under x86 emulation re
 diagnostic. See [M4 validation and limits](milestone_4_cpu_correctness.md).
 
 SuperKMeans reports little benefit at very small centroid counts and stronger gains
-on larger workloads. Its headline speedups are not expected Vextor gains.
+on larger workloads. Its headline speedups are not expected VxVector gains.
 See [SuperKMeans evaluation](https://arxiv.org/html/2603.20009v1#S4.SS3).
 
 Extend the experiments before selecting an algorithm:
@@ -790,8 +790,8 @@ Local design, validation, and implementation references:
 - [M6: GPU enablement](#milestone-6-gpu-enablement-and-vx-enhancements).
 - [M7: performance comparison against cuVS](#milestone-7-performance-comparison-against-cuvs).
 - [CPU k-means kernel](../src/kmeans.vx), [native build](../scripts/build.sh), and [Linux worker build](../scripts/build_linux_worker.sh).
-- [Data-path adapter](../src/data_path.c) and [public buffer and assignment contract](../include/vextor_data_path.h).
-- [Worker output](../src/worker.c) and [PostgreSQL centroid-table/index handoff](../pg_vextor/src/bridge.c).
+- [Data-path adapter](../src/data_path.c) and [public buffer and assignment contract](../include/vxvector_data_path.h).
+- [Worker output](../src/worker.c) and [PostgreSQL centroid-table/index handoff](../pg_vxvector/src/bridge.c).
 - [Real-data recall harness](../scripts/check_real_recall.py).
 
 ## Future experiments
@@ -803,7 +803,7 @@ These are optional research directions outside the current milestone commitments
 SSR learns sparse token representations and searches inverted posting lists rather
 than training a centroid codebook. It is an alternative representation and retrieval
 pipeline, requiring a learned projector and sparse scoring/index support beyond
-Vextor's external-centroid handoff. Its retrieval results do not establish a replacement
+VxVector's external-centroid handoff. Its retrieval results do not establish a replacement
 for arbitrary dense-vector nearest-neighbor search.
 
 - [ ] Evaluate the authors' implementation with a frozen encoder/projector on a small document corpus before implementing kernels in Vx.

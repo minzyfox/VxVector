@@ -11,7 +11,7 @@ from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parents[1]
 SUFFIX = ".dylib" if sys.platform == "darwin" else ".so"
-LIBRARY = PROJECT / "build" / f"libvextor_kmeans{SUFFIX}"
+LIBRARY = PROJECT / "build" / f"libvxvector_kmeans{SUFFIX}"
 
 
 def squared_distance(left, right):
@@ -44,7 +44,7 @@ class KmeansTests(unittest.TestCase):
         if not LIBRARY.exists():
             raise RuntimeError("build the library with scripts/build.sh first")
         cls.library = ctypes.CDLL(os.fspath(LIBRARY))
-        cls.run_function = cls.library.vextor_kmeans_v1
+        cls.run_function = cls.library.vxvector_kmeans_v1
         float_ptr = ctypes.POINTER(ctypes.c_float)
         int_ptr = ctypes.POINTER(ctypes.c_int32)
         cls.run_function.argtypes = (

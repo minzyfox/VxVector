@@ -14,7 +14,7 @@ Build the standalone library using the existing Vx checkout:
 python3 -m venv build/correctness-venv
 build/correctness-venv/bin/python -m pip install -r tests/requirements-correctness.txt
 build/correctness-venv/bin/python -B scripts/check_cpu_correctness.py
-VEXTOR_WORKER="$PWD/build/vextor-worker" \
+VXVECTOR_WORKER="$PWD/build/vxvector-worker" \
   build/correctness-venv/bin/python -B -m unittest discover -s tests -v
 ./scripts/check_data_path.sh
 ```
@@ -23,8 +23,8 @@ The four worker tests require an existing native worker. To build it on macOS:
 
 ```sh
 clang -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror \
-  -I include src/worker.c -L build -lvextor_kmeans \
-  -Wl,-rpath,"$PWD/build" -o build/vextor-worker
+  -I include src/worker.c -L build -lvxvector_kmeans \
+  -Wl,-rpath,"$PWD/build" -o build/vxvector-worker
 ```
 
 Start the existing PostgreSQL image using the README instructions. Then run:
@@ -82,7 +82,7 @@ Only one approximate index exists during each query. Its plan must select that i
 
 VectorChord 1.1.1 fixes its clustering initializer to `[7; 32]` internally.
 SQL does not expose that seed, initial centroids, or trained centroid rows.
-Its source sampler differs from Vextor's sampler. Internal build records use the
+Its source sampler differs from VxVector's sampler. Internal build records use the
 `seed` field only to identify the paired Vx run. It does not control internal training.
 The paired internal builds are independent repeats, not matched-initialization tests.
 Empty-cluster repair and floating-point reduction order also differ.
@@ -136,11 +136,11 @@ mkdir -p build/datasets
 curl --fail --location https://ann-benchmarks.com/glove-25-angular.hdf5 -o build/datasets/glove-25-angular.hdf5
 curl --fail --location https://ann-benchmarks.com/sift-128-euclidean.hdf5 -o build/datasets/sift-128-euclidean.hdf5
 shasum -a 256 --check tests/datasets.sha256
-DOCKER_CONTEXT=colima VEXTOR_CHECK_POSTGRES=1 bash scripts/check_cpu.sh
+DOCKER_CONTEXT=colima VXVECTOR_CHECK_POSTGRES=1 bash scripts/check_cpu.sh
 build/correctness-venv/bin/python -B scripts/check_contracts.py
 ```
 
-Set `VEXTOR_POSTGRES_CONTAINER` when checking another container.
+Set `VXVECTOR_POSTGRES_CONTAINER` when checking another container.
 The real-data fixtures roll back automatically. Downloaded data stays under ignored `build/`.
 
 Evidence:
@@ -165,7 +165,7 @@ The harness reconstructs the documented implementation's sample order and
 initial centroid positions. Both implementations receive the same float32 sample
 and initial centroid bytes. An equal random seed alone would not establish that.
 Faiss subsampling is disabled. Each Faiss call runs one Lloyd iteration, repeated
-for Vextor's requested count. This prevents Faiss early stopping from changing
+for VxVector's requested count. This prevents Faiss early stopping from changing
 the schedule. Restarts run separately and use independently recomputed sample
 objectives to choose the best result.
 
@@ -183,7 +183,7 @@ unit input vectors; its assignment ordering then agrees with Faiss inner-product
 search. This does not validate arbitrary non-spherical cosine against Faiss.
 Existing native tests also check directional and zero-vector cosine cases.
 
-Faiss splits populated clusters to replace empty clusters. Vextor substitutes a
+Faiss splits populated clusters to replace empty clusters. VxVector substitutes a
 sampled row. The matched fixtures must report zero Faiss splits; the suite fails
 if that policy difference enters a comparison. Six separate zero/duplicate cases
 check finite, normalized, known-answer outputs and valid trees when empty clusters
@@ -199,7 +199,7 @@ The SQL suite builds 24 indexes: four dimensions, three metrics, and both tree
 shapes. It uses deterministic 256-row directional fixtures and five held-out
 queries per index. The target is tie-aware recall@10 of at least `0.95` for every
 query. Exact ground truth uses a checked sequential-scan plan. Approximate
-queries must name the intended Vextor-built index in their plan.
+queries must name the intended VxVector-built index in their plan.
 
 Exact queries sort by distance and ID. An approximate result must contain ten
 distinct IDs. All exact neighbors strictly below the cutoff are required; tied
@@ -230,7 +230,7 @@ not a bound on total PostgreSQL or worker memory.
   zero/duplicate cases passed.
 - Existing native library, adapter, and worker tests: 22 passed without skips.
 - Existing allocation-failure and address/undefined-behavior sanitizer checks passed.
-- PostgreSQL 17.11, pgvector 0.8.2, VectorChord 1.1.1, pg_vextor 0.1.0:
+- PostgreSQL 17.11, pgvector 0.8.2, VectorChord 1.1.1, pg_vxvector 0.1.0:
   24 index builds, 120 recall queries, and larger-source budget checks passed.
 - Existing SQL failure, cancellation, permissions, and rollback checks passed.
 - Concurrent snapshot check passed.
@@ -305,3 +305,11 @@ embeddings and larger samples would broaden confidence beyond this bounded basel
 - [VectorChord settings](https://github.com/tensorchord/VectorChord/blob/main/src/index/gucs.rs)
   defines epsilon's default and range. The installed database settings also
   reported default 1.9 and range 0 to 4.
+
+## VxVector rename validation
+
+The project and extension now use VxVector and `pg_vxvector`.
+The November 5 rename check built the pinned compiler's kernel for native and Linux
+workers and validated a fresh PostgreSQL installation.
+See [the rename report](rename_vxvector.md) for current names, build hashes,
+solver requirements, and validation limits.

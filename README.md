@@ -1,14 +1,16 @@
-# Vextor
+# VxVector
 
-Vextor is a PostgreSQL extension that trains k-means centroids in Vx and uses them
+VxVector is a PostgreSQL extension that trains k-means centroids in Vx and uses them
 to build a VectorChord vector-search index. The current implementation runs on CPU.
 GPU acceleration will come later.
 
 - **pgvector** provides the `vector` data type and distance operators.
-- **Vextor** samples source vectors and trains centroids in a separate CPU worker.
+- **VxVector** samples source vectors and trains centroids in a separate CPU worker.
 - **VectorChord** builds the `vchordrq` index and serves nearest-neighbor queries.
 
-The current extension is `pg_vextor` 0.1.0, validated on PostgreSQL 17 / Linux amd64.
+The extension is `pg_vxvector` 0.1.0. Its SQL API uses the `vxvector` schema.
+See [the rename notes](docs/rename_vxvector.md) for changed names and validation.
+The repository URL and checkout folder remain `vextor`.
 It is intended for development and testing. Larger-data recall, performance,
 installation packages, upgrades, and other platforms still need validation.
 
@@ -30,10 +32,10 @@ x86 emulation for this setup. No GPU or CUDA installation is required.
 The database build compiles Vx and the extension inside Docker.
 Host Rust and LLVM are needed only for the native development/test path described below.
 
-### Get Vextor and the pinned Vx source
+### Get VxVector and the pinned Vx source
 
 These commands create new checkouts. Run them from the directory where you want
-Vextor to live:
+VxVector to live:
 
 ```sh
 git clone https://github.com/minzyfox/vextor.git
@@ -45,7 +47,7 @@ git -C "$VX_ROOT" checkout --detach "$(cat vx-revision.txt)"
 cp .env.example .env
 ```
 
-Edit `.env` and set `VEXTOR_POSTGRES_PASSWORD` to a local development password.
+Edit `.env` and set `VXVECTOR_POSTGRES_PASSWORD` to a local development password.
 The default port is `15432`. Keep an existing `.env` when reusing a database volume.
 If you already have both checkouts, set `VX_ROOT` to a checkout at the exact
 commit in [vx-revision.txt](vx-revision.txt). Use a separate checkout if your
@@ -59,7 +61,7 @@ example overrides that default with its adjacent `../Vx` directory.
 
 ### Build the images
 
-Run the remaining shell commands from the Vextor repository.
+Run the remaining shell commands from the VxVector repository.
 Use the Docker context containing your running engine. For Colima, select it with:
 
 ```sh
@@ -84,26 +86,26 @@ retain compiler and Cargo caches for later builds.
 Build logs are under `build/linux/`, including `vx-build.log`, `kmeans-build.log`,
 and `extension-build.log`.
 
-The complete image is `vextor-postgres:17-vextor`.
-Its base development image is `vextor-postgres:17-dev`.
+The complete image is `vxvector-postgres:17-vxvector`.
+Its base development image is `vxvector-postgres:17-dev`.
 Both native and Linux builds use the Vx pin. Build manifests record compiler,
 kernel source, and object hashes. The installed database image carries its manifest
-at `/usr/local/libexec/vextor/vx-build-info.json`.
+at `/usr/local/libexec/vxvector/vx-build-info.json`.
 
 ## Start the existing Docker setup
 
-Run these shell commands from the Vextor repository using your Docker context.
+Run these shell commands from the VxVector repository using your Docker context.
 On the current development machine, that context is `colima`.
 Colima users can select it with `export DOCKER_CONTEXT=colima`.
 The first command starts the service. The second opens the SQL prompt:
 
 ```sh
 docker-compose up -d --no-build --wait
-docker-compose exec postgres psql -U vextor -d vextor
+docker-compose exec postgres psql -U vxvector -d vxvector
 ```
 
 Use `docker compose` instead of `docker-compose` if the Compose plugin is installed.
-The database listens at `127.0.0.1:15432`, with database and user both named `vextor`.
+The database listens at `127.0.0.1:15432`, with database and user both named `vxvector`.
 The password is in the ignored `.env` file. This service uses its own data volume.
 The existing database on port 5432 is separate.
 
@@ -113,13 +115,13 @@ Enter SQL at the database prompt, and shell commands in your terminal.
 
 ## Create the extensions
 
-A fresh Vextor volume initializes these extensions automatically. These statements
-also work when connecting to an existing Vextor database:
+A fresh VxVector volume initializes these extensions automatically. These statements
+also work when connecting to an existing VxVector database:
 
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS vchord;
-CREATE EXTENSION IF NOT EXISTS pg_vextor;
+CREATE EXTENSION IF NOT EXISTS pg_vxvector;
 ```
 
 The Docker service preloads `vchord`. A PostgreSQL installation outside this image
@@ -133,13 +135,13 @@ The data is deterministic, so repeating it gives the same input.
 Use these example names in a database where they do not already exist.
 
 ```sql
-CREATE TABLE public.vextor_demo_items (
+CREATE TABLE public.vxvector_demo_items (
     id integer PRIMARY KEY,
     label text NOT NULL,
     features vector(3) NOT NULL
 );
 
-INSERT INTO public.vextor_demo_items (id, label, features)
+INSERT INTO public.vxvector_demo_items (id, label, features)
 SELECT
     i,
     format('group-%s', i % 4),
@@ -150,7 +152,7 @@ SELECT
     ]::real[]::vector(3)
 FROM generate_series(1, 1000) AS i;
 
-SELECT count(*) AS source_rows FROM public.vextor_demo_items;
+SELECT count(*) AS source_rows FROM public.vxvector_demo_items;
 ```
 
 The count should be `1000`. In an application, replace these dummy values with
@@ -160,8 +162,8 @@ components.
 ## Train centroids and build an index
 
 ```sql
-SELECT vextor.create_vector_index(
-    'public.vextor_demo_items',
+SELECT vxvector.create_vector_index(
+    'public.vxvector_demo_items',
     'features',
     ARRAY[4],
     sampling_factor => 40,
@@ -170,15 +172,15 @@ SELECT vextor.create_vector_index(
     kmeans_nredo => 3,
     distance_operator => 'l2',
     seed => 42,
-    centroid_table => 'vextor_demo_centroids',
-    index_name => 'vextor_demo_idx'
+    centroid_table => 'vxvector_demo_centroids',
+    index_name => 'vxvector_demo_idx'
 );
 
 SELECT id, parent, vector
-FROM public.vextor_demo_centroids
+FROM public.vxvector_demo_centroids
 ORDER BY id;
 
-ANALYZE public.vextor_demo_items;
+ANALYZE public.vxvector_demo_items;
 ```
 
 `ARRAY[4]` requests four leaf centroids. The function samples up to `4 * 40 = 160`
@@ -211,7 +213,7 @@ SELECT
     label,
     features,
     features <-> '[10,0,0]'::vector AS distance
-FROM public.vextor_demo_items
+FROM public.vxvector_demo_items
 ORDER BY features <-> '[10,0,0]'::vector
 LIMIT 5;
 ```
@@ -224,7 +226,7 @@ Inspect the query plan:
 ```sql
 EXPLAIN (ANALYZE, COSTS OFF)
 SELECT id
-FROM public.vextor_demo_items
+FROM public.vxvector_demo_items
 ORDER BY features <-> '[10,0,0]'::vector
 LIMIT 5;
 ```
@@ -237,14 +239,14 @@ SET enable_seqscan = off;
 
 EXPLAIN (ANALYZE, COSTS OFF)
 SELECT id
-FROM public.vextor_demo_items
+FROM public.vxvector_demo_items
 ORDER BY features <-> '[10,0,0]'::vector
 LIMIT 5;
 
 RESET enable_seqscan;
 ```
 
-The plan should include an index scan using `vextor_demo_idx`.
+The plan should include an index scan using `vxvector_demo_idx`.
 Keep the planner setting at its normal value for application queries.
 
 ## Optional: train centroids without an index
@@ -252,13 +254,13 @@ Keep the planner setting at its normal value for application queries.
 Use a different output name so this can run after the indexed example:
 
 ```sql
-SELECT vextor.create_vector_index(
-    'public.vextor_demo_items',
+SELECT vxvector.create_vector_index(
+    'public.vxvector_demo_items',
     'features',
     ARRAY[4],
     sampling_factor => 40,
     skip_index_build => true,
-    centroid_table => 'vextor_demo_training_centroids'
+    centroid_table => 'vxvector_demo_training_centroids'
 );
 ```
 
@@ -281,7 +283,7 @@ The returned `index` field is `null`. The call creates only the centroid table.
 | `residual_quantization` | Forwarded to the VectorChord index options. |
 
 The first three function arguments are source table, column name, and `lists`.
-See the [complete SQL signature](pg_vextor/sql/pg_vextor--0.1.0.sql) for defaults.
+See the [complete SQL signature](pg_vxvector/sql/pg_vxvector--0.1.0.sql) for defaults.
 Output names are individual identifiers in the source schema, with at most 63 bytes.
 
 Current source support is dense pgvector `vector` columns in ordinary heap tables
@@ -296,7 +298,7 @@ The CPU kernels use borrowed metric enums and explicit pointer contracts.
 They compute only the quantities required by the selected metric.
 Builds require Vx's flat code generator. Explicit SIMD tuning remains future work.
 See [the Vx main update](docs/vx_main_update_2026-11-04.md) for rationale and validation.
-See the [roadmap](docs/pg_vextor.md) for correctness validation, SIMD, GPU enablement,
+See the [roadmap](docs/pg_vxvector.md) for correctness validation, SIMD, GPU enablement,
 and the later comparison against cuVS.
 
 ## Clean up the example
@@ -305,9 +307,9 @@ These commands remove only the example tables. Dropping the source table also
 removes its index:
 
 ```sql
-DROP TABLE public.vextor_demo_items;
-DROP TABLE public.vextor_demo_centroids;
-DROP TABLE IF EXISTS public.vextor_demo_training_centroids;
+DROP TABLE public.vxvector_demo_items;
+DROP TABLE public.vxvector_demo_centroids;
+DROP TABLE IF EXISTS public.vxvector_demo_training_centroids;
 ```
 
 Exit `psql` with `\q`. To stop the Docker service while retaining the database:
@@ -318,7 +320,7 @@ docker-compose down
 
 ## Run tests
 
-Run test commands from the Vextor repository in your terminal. Exit `psql` with
+Run test commands from the VxVector repository in your terminal. Exit `psql` with
 `\q` first, or open another terminal. Keep the Docker context used to start the service.
 
 ### Quick database checks
@@ -338,8 +340,8 @@ They use dedicated fixture schemas. Most fixtures roll back. The snapshot check
 commits changes in its own schema and removes that schema afterward.
 The synthetic suite reports 24 index builds and 120 recall queries on success.
 
-The default container is `vextor-postgres-1`. If you changed the Compose project
-name, set `VEXTOR_POSTGRES_CONTAINER` to its PostgreSQL container name.
+The default container is `vxvector-postgres-1`. If you changed the Compose project
+name, set `VXVECTOR_POSTGRES_CONTAINER` to its PostgreSQL container name.
 
 ### Prepare the native CPU tests
 
@@ -366,10 +368,10 @@ python3 -m venv build/correctness-venv
 build/correctness-venv/bin/python -m pip install -r tests/requirements-correctness.txt
 ```
 
-The subshell returns you to Vextor after building Vx.
+The subshell returns you to VxVector after building Vx.
 Native builds require a clean tracked Vx checkout at the pinned revision.
-The library is `build/libvextor_kmeans.dylib` on macOS or
-`build/libvextor_kmeans.so` on Linux. Python commands use the environment directly;
+The library is `build/libvxvector_kmeans.dylib` on macOS or
+`build/libvxvector_kmeans.so` on Linux. Python commands use the environment directly;
 you do not need to activate it.
 
 Run the CPU-only suite without PostgreSQL or downloaded datasets:
@@ -404,7 +406,7 @@ Run the full suite in Bash or Zsh and save its output:
 
 ```sh
 set -o pipefail
-VEXTOR_CHECK_POSTGRES=1 bash scripts/check_cpu.sh 2>&1 | tee build/full-checks.log
+VXVECTOR_CHECK_POSTGRES=1 bash scripts/check_cpu.sh 2>&1 | tee build/full-checks.log
 ```
 
 This includes the native and database checks above, plus 24 paired Vx/VectorChord
@@ -484,7 +486,7 @@ The GPU command checks compilation only. It does not validate execution on a GPU
 
 ## Library API
 
-[`include/vextor_kmeans.h`](include/vextor_kmeans.h) defines the C ABI.
+[`include/vxvector_kmeans.h`](include/vxvector_kmeans.h) defines the C ABI.
 The caller supplies the input, output, and scratch arrays. The function returns
 zero on success and one for invalid arguments or float32 centroid-sum overflow.
 It makes one zero-vector root.
@@ -500,7 +502,7 @@ clusters use a sampled row as their replacement. Zero-length vectors stay zero
 when spherical centroids are enabled.
 
 The original array API requires resident input. The CPU host adapter in
-[`include/vextor_data_path.h`](include/vextor_data_path.h) accepts a streaming row
+[`include/vxvector_data_path.h`](include/vxvector_data_path.h) accepts a streaming row
 reader instead. It validates all rows, collects a repeatable bounded sample,
 checks a buffer memory budget before allocation, and calls the same Vx library.
 It reports read/validation, sampling, and clustering timings. Its sampler uses

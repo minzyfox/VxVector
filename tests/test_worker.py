@@ -20,10 +20,10 @@ class Reply(c.Structure):
         ("message", c.c_char * 256)]
 
 
-WORKER = os.environ.get("VEXTOR_WORKER")
+WORKER = os.environ.get("VXVECTOR_WORKER")
 
 
-@unittest.skipUnless(WORKER, "set VEXTOR_WORKER to the native CPU worker executable")
+@unittest.skipUnless(WORKER, "set VXVECTOR_WORKER to the native CPU worker executable")
 class WorkerTests(unittest.TestCase):
     def run_worker(self, payload):
         result = subprocess.run([WORKER], input=payload, stdout=subprocess.PIPE,

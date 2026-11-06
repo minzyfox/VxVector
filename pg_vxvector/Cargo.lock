@@ -571,7 +571,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pg_vextor"
+name = "pg_vxvector"
 version = "0.1.0"
 dependencies = [
  "cc",

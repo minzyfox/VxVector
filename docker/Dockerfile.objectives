@@ -1,6 +1,6 @@
-ARG VEXTOR_POSTGRES_IMAGE=vextor-postgres:17-vextor
-FROM ${VEXTOR_POSTGRES_IMAGE}
+ARG VXVECTOR_POSTGRES_IMAGE=vxvector-postgres:17-vxvector
+FROM ${VXVECTOR_POSTGRES_IMAGE}
 
 # This image is only for tests that opt into unrotated centroid capture.
 COPY build/objectives/libvchord.so /usr/lib/postgresql/17/lib/vchord.so
-COPY build/objectives/reference-build.json /usr/local/share/vextor-objectives/reference-build.json
+COPY build/objectives/reference-build.json /usr/local/share/vxvector-objectives/reference-build.json

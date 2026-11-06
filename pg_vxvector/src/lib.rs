@@ -7,8 +7,8 @@ pgrx::pg_module_magic!();
 
 #[pgrx::pg_guard]
 unsafe extern "C-unwind" {
-    fn vextor_pg_init();
-    fn vextor_pg_run(
+    fn vxvector_pg_init();
+    fn vxvector_pg_run(
         table: pg_sys::Oid,
         column: *const std::ffi::c_char,
         lists: *const i32,
@@ -31,7 +31,7 @@ unsafe extern "C-unwind" {
 
 #[pg_guard]
 pub unsafe extern "C-unwind" fn _PG_init() {
-    vextor_pg_init();
+    vxvector_pg_init();
 }
 
 fn cstring(value: &str) -> CString {
@@ -67,7 +67,7 @@ fn create_vector_index(
     let centroids = centroid_table.map(cstring);
     let index = index_name.map(cstring);
     let result = unsafe {
-        vextor_pg_run(
+        vxvector_pg_run(
             source_table,
             column.as_ptr(),
             lists.as_ptr(),

@@ -49,7 +49,7 @@ Vx uses seeds 0 and 17. Internal clustering keeps VectorChord's initializer seed
 comparisons, not matched-initialization differential tests.
 Coarse-stage objectives are recorded on each trainer's own leaves as diagnostics.
 Those leaf sets differ, so the coarse-stage values are not a matched training problem.
-Singleton routing roots are excluded from the quality gate; Vextor uses a zero root.
+Singleton routing roots are excluded from the quality gate; VxVector uses a zero root.
 
 ## Run the comparison
 
@@ -65,15 +65,15 @@ inside the build container and compiles VectorChord dependencies. This took abou
 ./scripts/build_objective_reference.sh
 ```
 
-This creates `vextor-postgres:17-objectives`. It does not replace the ordinary image.
+This creates `vxvector-postgres:17-objectives`. It does not replace the ordinary image.
 Start a separate database on port 15433 with its own Compose project and data volume:
 
 ```sh
-VEXTOR_POSTGRES_IMAGE=vextor-postgres:17-objectives VEXTOR_POSTGRES_PORT=15433 \
-  docker-compose -p vextor-objectives up -d --no-build --wait
-python3 -B scripts/check_centroid_capture.py --container vextor-objectives-postgres-1
+VXVECTOR_POSTGRES_IMAGE=vxvector-postgres:17-objectives VXVECTOR_POSTGRES_PORT=15433 \
+  docker-compose -p vxvector-objectives up -d --no-build --wait
+python3 -B scripts/check_centroid_capture.py --container vxvector-objectives-postgres-1
 build/correctness-venv/bin/python -B scripts/check_real_recall.py \
-  --container vextor-objectives-postgres-1 --capture-objectives
+  --container vxvector-objectives-postgres-1 --capture-objectives
 ```
 
 Use `docker compose` if the Compose plugin is installed.
@@ -96,8 +96,8 @@ build/correctness-venv/bin/python -B -m unittest discover -s tests -p test_objec
 Stop the reference database while retaining its data volume:
 
 ```sh
-VEXTOR_POSTGRES_IMAGE=vextor-postgres:17-objectives VEXTOR_POSTGRES_PORT=15433 \
-  docker-compose -p vextor-objectives down
+VXVECTOR_POSTGRES_IMAGE=vxvector-postgres:17-objectives VXVECTOR_POSTGRES_PORT=15433 \
+  docker-compose -p vxvector-objectives down
 ```
 
 ## Results

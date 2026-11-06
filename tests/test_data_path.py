@@ -81,23 +81,23 @@ class DataPathTests(unittest.TestCase):
     def setUpClass(cls):
         test_kmeans.KmeansTests.setUpClass()
         cls.library = test_kmeans.KmeansTests.library
-        cls.library.vextor_plan_cpu_v1.argtypes = [c.POINTER(Options), c.POINTER(Plan), c.POINTER(Error)]
-        cls.library.vextor_plan_cpu_v1.restype = c.c_int32
-        cls.library.vextor_run_cpu_v1.argtypes = [c.POINTER(Options), Next, c.c_void_p, c.POINTER(Result), c.POINTER(Error)]
-        cls.library.vextor_run_cpu_v1.restype = c.c_int32
-        cls.library.vextor_free_cpu_result_v1.argtypes = [c.POINTER(Result)]
-        cls.library.vextor_free_cpu_result_v1.restype = None
+        cls.library.vxvector_plan_cpu_v1.argtypes = [c.POINTER(Options), c.POINTER(Plan), c.POINTER(Error)]
+        cls.library.vxvector_plan_cpu_v1.restype = c.c_int32
+        cls.library.vxvector_run_cpu_v1.argtypes = [c.POINTER(Options), Next, c.c_void_p, c.POINTER(Result), c.POINTER(Error)]
+        cls.library.vxvector_run_cpu_v1.restype = c.c_int32
+        cls.library.vxvector_free_cpu_result_v1.argtypes = [c.POINTER(Result)]
+        cls.library.vxvector_free_cpu_result_v1.restype = None
 
     def plan(self, request, expected=0):
         plan, error = Plan(), Error()
-        status = self.library.vextor_plan_cpu_v1(c.byref(request), c.byref(plan), c.byref(error))
+        status = self.library.vxvector_plan_cpu_v1(c.byref(request), c.byref(plan), c.byref(error))
         self.assertEqual(status, expected, error.message.decode())
         self.assertEqual(error.code, expected)
         return plan
 
     def run_source(self, request, reader, expected=0):
         result, error = Result(), Error()
-        status = self.library.vextor_run_cpu_v1(c.byref(request), reader.callback, None,
+        status = self.library.vxvector_run_cpu_v1(c.byref(request), reader.callback, None,
                                                 c.byref(result), c.byref(error))
         try:
             self.assertEqual(status, expected, error.message.decode())
@@ -120,8 +120,8 @@ class DataPathTests(unittest.TestCase):
                 assignments=list(result.assignments[:samples]),
                 timings=(result.read_seconds, result.sample_seconds, result.clustering_seconds))
         finally:
-            self.library.vextor_free_cpu_result_v1(c.byref(result))
-            self.library.vextor_free_cpu_result_v1(c.byref(result))
+            self.library.vxvector_free_cpu_result_v1(c.byref(result))
+            self.library.vxvector_free_cpu_result_v1(c.byref(result))
 
     @staticmethod
     def points(count):

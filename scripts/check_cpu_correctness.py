@@ -86,7 +86,7 @@ def reference(points, k, factor, iterations, restarts, metric, spherical, seed):
 
 
 def lloyd_reference(points, k, factor, iterations, restarts, metric, spherical, seed):
-    """Independent float64 Lloyd oracle, including Vextor's empty-cluster policy."""
+    """Independent float64 Lloyd oracle, including VxVector's empty-cluster policy."""
     sample = points[sample_indices(len(points), k, factor, seed)].astype('float64')
     candidates = []
     for restart in range(restarts):
@@ -106,7 +106,7 @@ def lloyd_reference(points, k, factor, iterations, restarts, metric, spherical, 
 
 
 def native_function(library):
-    function = library.vextor_kmeans_v1
+    function = library.vxvector_kmeans_v1
     fp, ip = ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_int32)
     function.argtypes = [fp] + [ctypes.c_int32] * 11 + [fp, ip, ip, fp, fp, ip]
     function.restype = ctypes.c_int32
@@ -168,7 +168,7 @@ def check_structure(points, nodes, parents, labels, roots, leaves, metric, spher
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     suffix = '.dylib' if sys.platform == 'darwin' else '.so'
-    parser.add_argument('--library', type=Path, default=PROJECT / 'build' / f'libvextor_kmeans{suffix}')
+    parser.add_argument('--library', type=Path, default=PROJECT / 'build' / f'libvxvector_kmeans{suffix}')
     args = parser.parse_args()
     faiss.omp_set_num_threads(1)
     library = ctypes.CDLL(str(args.library.resolve()))

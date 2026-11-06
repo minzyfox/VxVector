@@ -20,29 +20,29 @@ SELECT version();
 SELECT extname, extversion FROM pg_extension WHERE extname IN ('vector', 'vchord') ORDER BY extname;
 SHOW shared_preload_libraries;
 
-CREATE SCHEMA vextor_image_smoke;
-CREATE TABLE vextor_image_smoke.items (id integer PRIMARY KEY, features vector(3) NOT NULL);
-INSERT INTO vextor_image_smoke.items
+CREATE SCHEMA vxvector_image_smoke;
+CREATE TABLE vxvector_image_smoke.items (id integer PRIMARY KEY, features vector(3) NOT NULL);
+INSERT INTO vxvector_image_smoke.items
 SELECT i, ARRAY[(i % 4) * 10 + (i % 17) * 0.001, (i % 7) * 0.001, (i % 11) * 0.001]::vector
 FROM generate_series(1, 1024) AS i;
 
-CREATE TABLE vextor_image_smoke.flat_centroids (
+CREATE TABLE vxvector_image_smoke.flat_centroids (
     id integer NOT NULL UNIQUE, parent integer, vector vector(3) NOT NULL
 );
-INSERT INTO vextor_image_smoke.flat_centroids VALUES
+INSERT INTO vxvector_image_smoke.flat_centroids VALUES
     (0, NULL, '[0,0,0]'),
     (1, 0, '[0.008,0.003,0.005]'),
     (2, 0, '[10.008,0.003,0.005]'),
     (3, 0, '[20.008,0.003,0.005]'),
     (4, 0, '[30.008,0.003,0.005]');
 
-CREATE INDEX vextor_image_flat_idx ON vextor_image_smoke.items
+CREATE INDEX vxvector_image_flat_idx ON vxvector_image_smoke.items
 USING vchordrq (features vector_l2_ops) WITH (options = $$
 residual_quantization = false
 [build.external]
-table = 'vextor_image_smoke.flat_centroids'
+table = 'vxvector_image_smoke.flat_centroids'
 $$);
-ANALYZE vextor_image_smoke.items;
+ANALYZE vxvector_image_smoke.items;
 SET LOCAL enable_seqscan = off;
 SET LOCAL vchordrq.probes = '4';
 
@@ -51,12 +51,12 @@ DECLARE
     plan json;
     found integer;
 BEGIN
-    EXECUTE 'EXPLAIN (FORMAT JSON) SELECT id FROM vextor_image_smoke.items ORDER BY features <-> ''[10,0,0]'' LIMIT 5' INTO plan;
-    IF position('vextor_image_flat_idx' IN plan::text) = 0 THEN
+    EXECUTE 'EXPLAIN (FORMAT JSON) SELECT id FROM vxvector_image_smoke.items ORDER BY features <-> ''[10,0,0]'' LIMIT 5' INTO plan;
+    IF position('vxvector_image_flat_idx' IN plan::text) = 0 THEN
         RAISE EXCEPTION 'The flat-tree query did not select the VectorChord index: %', plan;
     END IF;
     SELECT count(*) INTO found FROM (
-        SELECT id FROM vextor_image_smoke.items ORDER BY features <-> '[10,0,0]' LIMIT 5
+        SELECT id FROM vxvector_image_smoke.items ORDER BY features <-> '[10,0,0]' LIMIT 5
     ) AS nearest;
     IF found <> 5 THEN
         RAISE EXCEPTION 'The flat-tree query returned % rows instead of five', found;
@@ -64,13 +64,13 @@ BEGIN
 END
 $$;
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF)
-SELECT id FROM vextor_image_smoke.items ORDER BY features <-> '[10,0,0]' LIMIT 5;
+SELECT id FROM vxvector_image_smoke.items ORDER BY features <-> '[10,0,0]' LIMIT 5;
 
-DROP INDEX vextor_image_smoke.vextor_image_flat_idx;
-CREATE TABLE vextor_image_smoke.tree_centroids (
+DROP INDEX vxvector_image_smoke.vxvector_image_flat_idx;
+CREATE TABLE vxvector_image_smoke.tree_centroids (
     id integer NOT NULL UNIQUE, parent integer, vector vector(3) NOT NULL
 );
-INSERT INTO vextor_image_smoke.tree_centroids VALUES
+INSERT INTO vxvector_image_smoke.tree_centroids VALUES
     (0, NULL, '[0,0,0]'),
     (1, 0, '[5.008,0.003,0.005]'),
     (2, 0, '[25.008,0.003,0.005]'),
@@ -78,11 +78,11 @@ INSERT INTO vextor_image_smoke.tree_centroids VALUES
     (4, 1, '[10.008,0.003,0.005]'),
     (5, 2, '[20.008,0.003,0.005]'),
     (6, 2, '[30.008,0.003,0.005]');
-CREATE INDEX vextor_image_tree_idx ON vextor_image_smoke.items
+CREATE INDEX vxvector_image_tree_idx ON vxvector_image_smoke.items
 USING vchordrq (features vector_l2_ops) WITH (options = $$
 residual_quantization = false
 [build.external]
-table = 'vextor_image_smoke.tree_centroids'
+table = 'vxvector_image_smoke.tree_centroids'
 $$);
 SET LOCAL vchordrq.probes = '2,4';
 
@@ -91,12 +91,12 @@ DECLARE
     plan json;
     found integer;
 BEGIN
-    EXECUTE 'EXPLAIN (FORMAT JSON) SELECT id FROM vextor_image_smoke.items ORDER BY features <-> ''[10,0,0]'' LIMIT 5' INTO plan;
-    IF position('vextor_image_tree_idx' IN plan::text) = 0 THEN
+    EXECUTE 'EXPLAIN (FORMAT JSON) SELECT id FROM vxvector_image_smoke.items ORDER BY features <-> ''[10,0,0]'' LIMIT 5' INTO plan;
+    IF position('vxvector_image_tree_idx' IN plan::text) = 0 THEN
         RAISE EXCEPTION 'The two-level query did not select the VectorChord index: %', plan;
     END IF;
     SELECT count(*) INTO found FROM (
-        SELECT id FROM vextor_image_smoke.items ORDER BY features <-> '[10,0,0]' LIMIT 5
+        SELECT id FROM vxvector_image_smoke.items ORDER BY features <-> '[10,0,0]' LIMIT 5
     ) AS nearest;
     IF found <> 5 THEN
         RAISE EXCEPTION 'The two-level query returned % rows instead of five', found;
@@ -104,7 +104,7 @@ BEGIN
 END
 $$;
 EXPLAIN (ANALYZE, COSTS OFF, TIMING OFF)
-SELECT id FROM vextor_image_smoke.items ORDER BY features <-> '[10,0,0]' LIMIT 5;
+SELECT id FROM vxvector_image_smoke.items ORDER BY features <-> '[10,0,0]' LIMIT 5;
 
 ROLLBACK;
 \echo 'PostgreSQL image checks passed; smoke tables and indexes were rolled back.'
