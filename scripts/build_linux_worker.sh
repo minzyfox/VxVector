@@ -2,7 +2,17 @@
 set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-vx_root="${VX_ROOT:-$(cd "$project_root/../.." && pwd)/Vx}"
+if [[ -n "${VX_ROOT:-}" ]]; then
+  vx_root="$VX_ROOT"
+elif [[ -d "$project_root/../Vx" ]]; then
+  vx_root="$project_root/../Vx"
+elif [[ -d "$project_root/../../Vx" ]]; then
+  vx_root="$project_root/../../Vx"
+else
+  echo "VX_ROOT is unset and no Vx checkout was found next to this repo." >&2
+  echo "Expected one of: $project_root/../Vx or $project_root/../../Vx" >&2
+  exit 1
+fi
 revision="$(cat "$project_root/vx-revision.txt")"
 builder="${VXVECTOR_VX_BUILD_CONTAINER:-vxvector-vx-build}"
 source_dir="/workspace/vxvector-vx/$revision"
@@ -26,7 +36,7 @@ docker exec "$builder" mkdir -p "$source_dir"
 git -C "$vx_root" archive "$revision" | docker exec -i "$builder" tar -xf - -C "$source_dir"
 docker exec "$builder" ln -sfn /workspace/target "$source_dir/target"
 docker exec -w "$source_dir" "$builder" bash -lc \
-  './setup.sh && source config.local && export CARGO_TARGET_DIR=/workspace/target VX_VERSION_WITH_COMMIT=1 && cargo build --locked -j 2 --bin vxc -p vxc && cargo build --locked -j 2 -p vx_std_core' \
+  './setup.sh && source config.local && export CARGO_TARGET_DIR=/workspace/target VX_VERSION_WITH_COMMIT=1 && cargo build --locked -j 2 --profile release --bin vxc -p vxc && cargo build --locked -j 2 --profile release -p vx_std_core' \
   > "$project_root/build/linux/vx-build.log" 2>&1
 docker cp "$project_root/src/kmeans.vx" "$builder:$source_dir/vxvector_kmeans.vx"
 docker exec -w "$source_dir" "$builder" bash -lc \

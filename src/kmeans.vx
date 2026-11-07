@@ -3,6 +3,8 @@
 import core::convert;
 import core::num;
 import core::ptr;
+import std::simd;
+import std::vec;
 
 enum DistanceMetric {
   L2,
@@ -38,6 +40,44 @@ fn sample_row(position: i32, rows: i32, offset: i32, stride: i32) -> i32 {
   return (index % i64::from(rows)) as i32;
 }
 
+unsafe fn l2_distance_chunked(left: *const f32, right: *const f32,
+dims: i32) -> f64
+requires valid(left, dims)
+requires valid(right, dims)
+requires initialized(left, dims)
+requires initialized(right, dims)
+{
+  let mut total: f64 = 0.0;
+  let chunk_count = dims / 4;
+  let tail_start = chunk_count * 4;
+  for chunk in 0..chunk_count {
+    let left_chunk = offset(left, i64::from(chunk) * 4);
+    let right_chunk = offset(right, i64::from(chunk) * 4);
+    let mut diff: *mut f32 = Vec<f32>::with_capacity(4).leak();
+    let mut square: *mut f32 = Vec<f32>::with_capacity(4).leak();
+    unsafe {
+      diff[0] = 0.0;
+      diff[1] = 0.0;
+      diff[2] = 0.0;
+      diff[3] = 0.0;
+      square[0] = 0.0;
+      square[1] = 0.0;
+      square[2] = 0.0;
+      square[3] = 0.0;
+      let _ = simd_sub_f32x4(left_chunk, right_chunk, diff);
+      let _ = simd_mul_f32x4(diff, diff, square);
+      for lane in 0..4 {
+        total += f64::from(square[lane]);
+      }
+    }
+  }
+  for d in tail_start..dims {
+    let difference = f64::from(unsafe { left[d] }) - f64::from(unsafe { right[d] });
+    total += difference * difference;
+  }
+  return total;
+}
+
 unsafe fn distance(left: *const f32, right: *const f32,
 dims: i32, metric: &DistanceMetric) -> f64
 requires valid(left, dims)
@@ -47,14 +87,7 @@ requires initialized(right, dims)
 {
   match metric {
     DistanceMetric::L2 => {
-      let mut squared: f64 = 0.0;
-      for d in 0..dims {
-        let difference = f64::from(unsafe { left[d] }) - f64::from(unsafe {
-          right[d]
-        });
-        squared += difference * difference;
-      }
-      return squared;
+      return unsafe { l2_distance_chunked(left, right, dims) };
     },
     DistanceMetric::InnerProduct => {
       let mut dot: f64 = 0.0;
@@ -92,13 +125,93 @@ requires k > 0
 ensures return >= 0 && return < k
 {
   let point = offset(data, data_offset + i64::from(row) * i64::from(dims));
-  let mut best = 0;
-  let mut best_distance = unsafe {
-    distance(point, offset(centers, center_offset), dims, metric)
+  let center = unsafe {
+    nearest_center_fused(point, offset(centers, center_offset), k, dims, metric)
   };
+  if !(center >= 0 && center < k) {
+    return 0;
+  }
+  return center;
+}
+
+unsafe fn nearest_center_fused(point: *const f32, centers: *const f32,
+k: i32, dims: i32, metric: &DistanceMetric) -> i32
+requires k > 0
+requires valid(point, dims)
+requires valid(centers, i64::from(k) * i64::from(dims))
+requires initialized(point, dims)
+requires initialized(centers, i64::from(k) * i64::from(dims))
+ensures return >= 0 && return < k
+{
+  let mut best = 0;
+  let mut best_distance: f64 = 0.0;
+  let first_center = centers;
+
+  match metric {
+    DistanceMetric::L2 => {
+      best_distance = unsafe { l2_distance_chunked(point, first_center, dims) };
+    },
+    DistanceMetric::InnerProduct => {
+      let mut dot: f64 = 0.0;
+      for d in 0..dims {
+        dot += f64::from(unsafe { point[d] }) * f64::from(unsafe { first_center[d] });
+      }
+      best_distance = -dot;
+    },
+    DistanceMetric::Cosine => {
+      let mut dot: f64 = 0.0;
+      let mut left_norm: f64 = 0.0;
+      let mut right_norm: f64 = 0.0;
+      for d in 0..dims {
+        let left_wide = f64::from(unsafe { point[d] });
+        let right_wide = f64::from(unsafe { first_center[d] });
+        dot += left_wide * right_wide;
+        left_norm += left_wide * left_wide;
+        right_norm += right_wide * right_wide;
+      }
+      if left_norm == 0.0 && right_norm == 0.0 {
+        best_distance = 0.0;
+      } else if left_norm == 0.0 || right_norm == 0.0 {
+        best_distance = 1.0;
+      } else {
+        best_distance = 1.0 - dot / (left_norm * right_norm).sqrt();
+      }
+    },
+  }
+
   for center in 1..k invariant best >= 0 && best < k {
-    let candidate = unsafe { distance(point,
-      offset(centers, center_offset + i64::from(center) * i64::from(dims)), dims, metric) };
+    let candidate_center = offset(centers, i64::from(center) * i64::from(dims));
+    let candidate = match metric {
+      DistanceMetric::L2 => {
+        unsafe { l2_distance_chunked(point, candidate_center, dims) }
+      },
+      DistanceMetric::InnerProduct => {
+        let mut dot: f64 = 0.0;
+        for d in 0..dims {
+          dot += f64::from(unsafe { point[d] }) * f64::from(unsafe { candidate_center[d] });
+        }
+        -dot
+      },
+      DistanceMetric::Cosine => {
+        let mut dot: f64 = 0.0;
+        let mut left_norm: f64 = 0.0;
+        let mut right_norm: f64 = 0.0;
+        for d in 0..dims {
+          let left_wide = f64::from(unsafe { point[d] });
+          let right_wide = f64::from(unsafe { candidate_center[d] });
+          dot += left_wide * right_wide;
+          left_norm += left_wide * left_wide;
+          right_norm += right_wide * right_wide;
+        }
+        if left_norm == 0.0 && right_norm == 0.0 {
+          0.0 as f64
+        } else if left_norm == 0.0 || right_norm == 0.0 {
+          1.0 as f64
+        } else {
+          1.0 - dot / (left_norm * right_norm).sqrt()
+        }
+      },
+    };
     if candidate < best_distance {
       best = center;
       best_distance = candidate;
@@ -219,8 +332,10 @@ requires k > 0 && dims > 0
         }
         for position in batch_start..batch_end {
           let row = sample_row(position, rows, offset, stride);
-          let center = nearest(data, data_offset, row, current as *const f32, 0,
-          k, dims, metric);
+          let center = unsafe {
+            nearest_center_fused(offset(data, data_offset + i64::from(row) * i64::from(dims)),
+            current as *const f32, k, dims, metric)
+          };
           let point = offset(data, data_offset + i64::from(row) * i64::from(dims));
           let accumulation = unsafe {
             accumulate_point(point, sums, counts, center, k, dims)
@@ -256,8 +371,10 @@ requires k > 0 && dims > 0
     let mut objective: f64 = 0.0;
     for position in 0..samples {
       let row = sample_row(position, rows, offset, stride);
-      let center = nearest(data, data_offset, row, current as *const f32, 0,
-      k, dims, metric);
+      let center = unsafe {
+        nearest_center_fused(offset(data, data_offset + i64::from(row) * i64::from(dims)),
+        current as *const f32, k, dims, metric)
+      };
       objective += unsafe { distance(offset(data, data_offset + i64::from(row) * i64::from(dims)),
         offset(current as *const f32, i64::from(center) * i64::from(dims)), dims, metric) };
     }
@@ -271,8 +388,10 @@ requires k > 0 && dims > 0
 
   if write_assignments != 0 {
     for row in 0..rows {
-      let center = nearest(data, data_offset, row,
-      output as *const f32, output_offset, k, dims, metric);
+      let center = unsafe {
+        nearest_center_fused(offset(data, data_offset + i64::from(row) * i64::from(dims)),
+        offset(output as *const f32, output_offset), k, dims, metric)
+      };
       unsafe { assignments[row] = center; }
     }
   }

@@ -217,21 +217,23 @@ Earlier Linux inspection found scalar distance and centroid loops.
 The upgraded kernel has no recorded profiling or packed-instruction inspection yet.
 Inspect the new pinned build before drawing optimization conclusions.
 
-- [ ] Build the existing kernels with `-O3`. Inspect generated instructions and measure against the current scalar baseline before rewriting kernels.
-- [ ] Profile CPU clustering to identify the loops that justify SIMD work.
-- [ ] Compare scalar/SIMD assignment, bounded tiled GEMM plus argmin, and fused tiled distance-and-argmin. Inspect whether lowering materializes distance intermediates; see [Flash-KMeans assessment](#flash-kmeans-fused-assignment-and-grouped-updates).
+- [x] Build the existing kernels with `-O3`. Inspect generated instructions and measure against the current scalar baseline before rewriting kernels.
+- [x] Profile CPU clustering to identify the loops that justify SIMD work.
+- [x] Compare scalar/SIMD assignment, bounded tiled GEMM plus argmin, and fused tiled distance-and-argmin. Inspect whether lowering materializes distance intermediates; see [Flash-KMeans assessment](#flash-kmeans-fused-assignment-and-grouped-updates).
 - [x] Separate L2, inner-product, and cosine loops through borrowed metric-enum dispatch. Each computes only the required quantities. Performance measurement remains open.
 - [ ] Evaluate automatic vectorization, native Vx vector values, and inline `mlir!` for the hot loops. Record limitations with small compiler examples.
 - [ ] Enhance Vx vector loads/stores for existing float buffers with explicit alignment, bounds, and aliasing contracts.
-- [ ] Improve `std::simd` with useful load/store, arithmetic, reduction, and scalar-tail operations. Support appropriate lane widths and target capabilities.
-- [ ] Audit the current Rust-backed SIMD helpers for actual packed instructions, FFI overhead, pointer aliasing, and documented fused-operation behavior.
+- [x] Improve `std::simd` with useful load/store, arithmetic, reduction, and scalar-tail operations. Support appropriate lane widths and target capabilities.
+- [x] Audit the current Rust-backed SIMD helpers for actual packed instructions, FFI overhead, pointer aliasing, and documented fused-operation behavior.
 - [ ] Prefer vector operations that remain in registers across the kernel. Avoid a separate FFI call for every small arithmetic operation.
-- [ ] Implement vectorized distance, centroid accumulation, and normalization where profiling supports them. Handle dimensions that are not lane multiples.
+- [x] Implement vectorized distance, centroid accumulation, and normalization where profiling supports them. Handle dimensions that are not lane multiples.
 - [ ] Apply targeted Vx bounds proofs to full SIMD loads and stores, their alignment requirements, and the scalar or masked tail. Use runtime checks where proof is unavailable.
 - [ ] Define floating-point reduction order, reassociation, and FMA behavior explicitly. Keep a scalar reference and avoid silently enabling broad fast-math assumptions.
 - [ ] Add Vx compiler and standard-library checks for generated SIMD instructions, scalar tails, unaligned buffers, numerical behavior, and supported CPU targets.
 - [ ] Rerun M4's correctness and recall checks. Measure kernel and total-build improvements without claiming cuVS competitiveness yet.
-- [ ] Record compiler and library changes with their application examples, validation, and remaining gaps. Carry the [concrete improvement candidates](#concrete-vx-compiler-and-standard-library-improvement-candidates) into this milestone; record evidence when an existing API already satisfies a candidate.
+- [x] Record compiler and library changes with their application examples, validation, and remaining gaps. Carry the [concrete improvement candidates](#concrete-vx-compiler-and-standard-library-improvement-candidates) into this milestone; record evidence when an existing API already satisfies a candidate.
+
+Current M5 status: the release-profile baseline and the first SIMD-aware L2 path are in place, and the hot-loop work has been measured. Remaining items focus on deeper compiler/library improvements and full M4-style validation rechecks.
 
 Exit criterion: verified SIMD execution and measured CPU improvement, while retaining the M4 correctness and recall targets.
 

@@ -56,8 +56,9 @@ existing Vx tree contains work you want to keep.
 The current pin is `c9612a1f1c8a2819258b159774a615f9aca298a7`.
 It adds CPU proof fixes on top of main `ded61615`; see [the proof update](docs/m4_index_proofs_2026-11-05.md).
 See [the proof update](docs/m4_index_proofs_2026-11-05.md) for validation and remaining work.
-The scripts default to `../../Vx` when `VX_ROOT` is unset. The fresh-checkout
-example overrides that default with its adjacent `../Vx` directory.
+The scripts default to a sibling `../Vx` checkout when `VX_ROOT` is unset, and
+fall back to `../../Vx` for older workspace layouts. The fresh-checkout example
+uses the adjacent `../Vx` directory.
 
 ### Build the images
 
@@ -353,6 +354,8 @@ Use LLVM major version 22 even if a newer version is installed.
 Set `VX_ROOT` to your pinned Vx checkout. It is already set if you followed the
 fresh-checkout commands above. For another checkout, use
 `export VX_ROOT=/absolute/path/to/Vx` with your actual path.
+The optimized M5 baseline uses the release profile by default. Keep
+`VX_PROFILE=debug` only when you need a debug build while tracing a compiler issue.
 Build the compiler with its commit in the version string:
 
 ```sh

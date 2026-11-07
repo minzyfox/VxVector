@@ -2,8 +2,18 @@
 set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-vx_root="${VX_ROOT:-$(cd "$project_root/../.." && pwd)/Vx}"
-profile="${VX_PROFILE:-debug}"
+if [[ -n "${VX_ROOT:-}" ]]; then
+  vx_root="$VX_ROOT"
+elif [[ -d "$project_root/../Vx" ]]; then
+  vx_root="$project_root/../Vx"
+elif [[ -d "$project_root/../../Vx" ]]; then
+  vx_root="$project_root/../../Vx"
+else
+  echo "VX_ROOT is unset and no Vx checkout was found next to this repo." >&2
+  echo "Expected one of: $project_root/../Vx or $project_root/../../Vx" >&2
+  exit 1
+fi
+profile="${VX_PROFILE:-release}"
 revision="$(cat "$project_root/vx-revision.txt")"
 if [[ "$(git -C "$vx_root" rev-parse HEAD)" != "$revision" ]]; then
   echo "VX_ROOT must be checked out at the commit in vx-revision.txt: $revision" >&2
