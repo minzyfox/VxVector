@@ -4,12 +4,18 @@ import core::num;
 
 // Each assignment loop pass writes one label. Each reduction pass writes one
 // center. Vx currently emits these loops without parallel launch metadata.
-pub fn vxvector_gpu_lloyd_v1(points: *mut f32 in Memory::GPU_HBM,
-  rows: i32, dims: i32, k: i32, iterations: i32,
-  metric: i32, spherical: i32,
+pub fn vxvector_gpu_lloyd_v1(
+  points: *mut f32 in Memory::GPU_HBM,
+  rows: i32,
+  dims: i32,
+  k: i32,
+  iterations: i32,
+  metric: i32,
+  spherical: i32,
   centers: *mut f32 in Memory::GPU_HBM,
   next: *mut f32 in Memory::GPU_HBM,
-  labels: *mut i32 in Memory::GPU_HBM) -> void {
+  labels: *mut i32 in Memory::GPU_HBM
+) -> void {
   let input = unsafe { tensor_view_2d(points, rows, dims) };
   let mut centroids = unsafe { tensor_view_2d(centers, k, dims) };
   let mut updated = unsafe { tensor_view_2d(next, k, dims) };
