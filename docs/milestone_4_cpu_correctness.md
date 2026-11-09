@@ -1,9 +1,15 @@
-# Milestone 4: CPU correctness baseline
+# Reference: CPU correctness baseline
+
+**Reference only.** This document preserves test procedures and dated evidence.
+The [active roadmap](pg_vxvector.md) is the single source of truth for next steps and completion gates.
+Its GPU-first sequence supersedes the earlier milestone ordering below.
+The results apply to their recorded revisions, not automatically to the current kernel or Vx pin.
+The remaining-work discussion records the historical state and is not an independent TODO list.
 
 November 4, 2026. Synthetic and real-data CPU checks pass. The CI workflow and
 targeted verification examples are implemented. M4 remains open for full kernel
 proofs and a hosted CI result. The internal clustering-objective comparison now passes; see [results and limits](internal_objectives.md).
-SIMD, GPU, and performance comparisons remain later milestones.
+At the time of this record, SIMD, GPU, and performance comparisons were later milestones. Follow the active roadmap for current ordering.
 
 ## Run the checks
 
@@ -266,7 +272,7 @@ were also disabled. PostgreSQL still selected the index. That attempt did not
 prove the plan assertion; enabling sequential scans made the corrected mutation
 fail at the intended assertion.
 
-## Remaining M4 work
+## Historical remaining work at the recorded revisions
 
 The November 4 compiler upgrade used Vx `7cc3d2d9` with borrowed metric enums,
 pointer contracts, and recorded build hashes. Its
@@ -295,7 +301,8 @@ see [the manifest, measurements, and limits](internal_objectives.md).
 - Record a successful hosted CI run. The workflow and its component commands are
   implemented and locally validated. No remote workflow was triggered.
 
-The optional scikit-learn cross-check remains optional. Higher-dimensional real
+Current priority and required checks are defined only in the [active roadmap](pg_vxvector.md).
+The optional scikit-learn cross-check remains reference material. Higher-dimensional real
 embeddings and larger samples would broaden confidence beyond this bounded baseline.
 
 ## Reference contracts

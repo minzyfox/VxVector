@@ -2,7 +2,9 @@
 
 VxVector is a PostgreSQL extension that trains k-means centroids in Vx and uses them
 to build a VectorChord vector-search index. The current implementation runs on CPU.
-GPU acceleration will come later.
+GPU execution with automatic CPU selection is the next priority; Apple Metal is the first target.
+The [active roadmap](docs/pg_vxvector.md) is the single source of truth for implementation order.
+CPU SIMD tuning follows the working GPU path.
 
 - **pgvector** provides the `vector` data type and distance operators.
 - **VxVector** samples source vectors and trains centroids in a separate CPU worker.
@@ -54,9 +56,10 @@ commit in [vx-revision.txt](vx-revision.txt). Use a separate checkout if your
 existing Vx tree contains work you want to keep.
 
 The current pin is `31296d42919c0f2f042814f42ab864235026e9ed`, a commit on Vx `main`.
-`main` includes the earlier fork proof fixes except
-[vx-lang/Vx#2852](https://github.com/vx-lang/Vx/pull/2852); `src/kmeans.vx` works around it.
-See [the proof update](docs/m4_index_proofs_2026-11-05.md) for validation and remaining work.
+This pin predates [vx-lang/Vx#2852](https://github.com/vx-lang/Vx/pull/2852); `src/kmeans.vx` works around it.
+The reviewed November 9 main includes that fix, but upgrading the pin still requires validation.
+See [the proof update](docs/m4_index_proofs_2026-11-05.md) for historical validation.
+The active roadmap records current source/artifact differences and the required baseline refresh.
 The scripts default to `../../Vx` when `VX_ROOT` is unset. The fresh-checkout
 example overrides that default with its adjacent `../Vx` directory.
 
@@ -299,8 +302,7 @@ The CPU kernels use borrowed metric enums and explicit pointer contracts.
 They compute only the quantities required by the selected metric.
 Builds require Vx's flat code generator. Explicit SIMD tuning remains future work.
 See [the Vx main update](docs/vx_main_update_2026-11-04.md) for rationale and validation.
-See the [roadmap](docs/pg_vxvector.md) for correctness validation, SIMD, GPU enablement,
-and the later comparison against cuVS.
+See the [active roadmap](docs/pg_vxvector.md) for baseline refresh, Apple GPU execution, CPU fallback, and PostgreSQL integration.
 
 ## Clean up the example
 
@@ -444,7 +446,8 @@ The audit identifies trust boundaries; it does not prove them.
 The [November 4 upgraded-worker results](docs/evidence/vx_main_test_summary_2026-11-04.json)
 and [full recorded log](docs/evidence/vx_main_checks_2026-11-04.txt) used Vx `7cc3d2d9`.
 See [the proof update](docs/m4_index_proofs_2026-11-05.md) for the current pin.
-See [M4 details](docs/milestone_4_cpu_correctness.md) for tolerances and remaining work.
+See the [CPU correctness reference](docs/milestone_4_cpu_correctness.md) for recorded tolerances and evidence.
+Use the [active roadmap](docs/pg_vxvector.md) for remaining work.
 
 ### Internal trainer objectives
 
@@ -458,7 +461,7 @@ Compose project. The ordinary database image does not export internal centroids.
 The M4 synthetic baseline compares matched samples and initial centroids with
 Faiss CPU, then checks SQL index recall against exact PostgreSQL scans.
 See [M4 checks and recorded results](docs/milestone_4_cpu_correctness.md) for
-setup, tolerances, query settings, and remaining validation work.
+historical setup, tolerances, query settings, and validation limits.
 The default-epsilon experiment missed the recall target. The conservative
 all-probe, epsilon-4 run passed; this does not establish production recall or speed.
 
