@@ -20,6 +20,38 @@ def check_copy(llvm):
         raise AssertionError('Copy load/store alias contracts are missing from LLVM')
 
 
+# The only trusted clauses outside the C boundary: two copies from data into
+# current. Vx's !overlaps takes one length for both buffers, so it cannot state
+# that two buffers of different lengths are disjoint.
+KNOWN_TRUSTED = {('run_restart', '!overlaps(destination, source, length)'): 2}
+
+
+def trusted_clauses(compiler, vx_root, path):
+    """Map (function, clause) to the number of trusted clauses that `--audit` lists."""
+    result = subprocess.run([str(compiler), str(path), '--audit'], cwd=vx_root,
+                            capture_output=True, text=True, timeout=60)
+    if result.returncode != 0:
+        raise AssertionError(f'Audit of {path.name} failed: {result.stderr}')
+    lines = path.read_text().splitlines()
+    starts = [(number, match.group(1)) for number, line in enumerate(lines, 1)
+              if (match := re.match(r'(?:pub |unsafe )*fn (\w+)', line))]
+    counts = {}
+    for entry in re.finditer(r':(\d+):\d+: a call in `unsafe` code trusts `(.+?)` of', result.stdout + result.stderr):
+        line = int(entry.group(1))
+        function = [name for start, name in starts if start <= line][-1]
+        key = (function, entry.group(2))
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def check_audit(compiler, vx_root, path):
+    """Raise unless each trusted clause is at the C boundary or in KNOWN_TRUSTED."""
+    counts = trusted_clauses(compiler, vx_root, path)
+    inside = {key: n for key, n in counts.items() if key[0] != 'vxvector_kmeans_v1'}
+    if inside != KNOWN_TRUSTED:
+        raise AssertionError(f'Trusted clauses outside the C boundary: {inside}')
+
+
 def main():
     project = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
@@ -27,9 +59,11 @@ def main():
     args = parser.parse_args()
     compiler = args.vx_root / 'target/debug/vxc'
     source = (project / 'src/kmeans.vx').read_text()
+    # Without its validity clauses, copy_vector can no longer prove that it
+    # initializes its destination, so the checker rejects it before code generation.
+    rejected = [('missing_validity', source.replace('requires valid(destination, length)\n', '')
+                 .replace('requires valid(source, length)\n', ''), 'E8012')]
     cases = [('kernel', source, None),
-             ('missing_validity', source.replace('requires valid(destination, length)\n', '')
-              .replace('requires valid(source, length)\n', ''), 'pointer validity'),
              ('missing_alias_contract', source.replace('requires !overlaps(destination, source, length)\n', ''),
               'alias contracts')]
     # Numeric contracts are checked at unsafe calls too. Removing nearest's bound must
@@ -41,7 +75,28 @@ def main():
                                         'return rows * dims;'), 'E8001'),
     ]
     with tempfile.TemporaryDirectory() as temporary:
-        for name, text, expected in proof_mutations:
+        # Pointer clauses inside the kernel are proved, not trusted. A read one
+        # row past a sampled row must appear in the audit.
+        path = Path(temporary) / 'audit.vx'
+        path.write_text(source)
+        check_audit(compiler, args.vx_root, path)
+        print(json.dumps(dict(case='audit', result='passed', expected_failure=None)), flush=True)
+        past_end = source.replace('let point: *const f32 = offset(data, row * width);',
+                                  'let point: *const f32 = offset(data, (row + 1i64) * width);')
+        if past_end == source:
+            raise AssertionError('past_end mutation did not change the source')
+        path.write_text(past_end)
+        try:
+            check_audit(compiler, args.vx_root, path)
+        except AssertionError as error:
+            if 'run_restart' not in str(error):
+                raise
+        else:
+            raise AssertionError('past_end must add a trusted clause in run_restart')
+        print(json.dumps(dict(case='audit_past_end', result='passed',
+                              expected_failure='trusted clause')), flush=True)
+
+        for name, text, expected in proof_mutations + rejected:
             if text == source:
                 raise AssertionError(f'{name} mutation did not change the source')
             path = Path(temporary) / (name + '.vx')
