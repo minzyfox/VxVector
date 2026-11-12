@@ -1,0 +1,27 @@
+Warning in src/kmeans.vx: the prover ignores a condition here: it cannot reason about the `Div` operator
+src/kmeans.vx:349:14: a call in `unsafe` code trusts `!overlaps(destination, source, length)` of `copy_vector`, which the compiler cannot prove
+src/kmeans.vx:392:18: a call in `unsafe` code trusts `!overlaps(destination, source, length)` of `copy_vector`, which the compiler cannot prove
+src/kmeans.vx:520:30: a call in `unsafe` code trusts `!overlaps(output, current, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+src/kmeans.vx:520:30: a call in `unsafe` code trusts `initialized(data, rows as i64 * dims as i64)` of `train`, which the compiler cannot prove
+src/kmeans.vx:520:30: a call in `unsafe` code trusts `valid(counts, k)` of `train`, which the compiler cannot prove
+src/kmeans.vx:520:30: a call in `unsafe` code trusts `valid(current, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+src/kmeans.vx:520:30: a call in `unsafe` code trusts `valid(data, rows as i64 * dims as i64)` of `train`, which the compiler cannot prove
+src/kmeans.vx:520:30: a call in `unsafe` code trusts `valid(output, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+src/kmeans.vx:520:30: a call in `unsafe` code trusts `valid(sums, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+src/kmeans.vx:526:12: a call in `unsafe` code trusts `initialized(centers, k as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+src/kmeans.vx:526:12: a call in `unsafe` code trusts `initialized(data, rows as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+src/kmeans.vx:526:12: a call in `unsafe` code trusts `valid(centers, k as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+src/kmeans.vx:526:12: a call in `unsafe` code trusts `valid(data, rows as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+src/kmeans.vx:526:12: a call in `unsafe` code trusts `valid(out, rows)` of `assign_rows`, which the compiler cannot prove
+src/kmeans.vx:537:30: a call in `unsafe` code trusts `!overlaps(output, current, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+src/kmeans.vx:537:30: a call in `unsafe` code trusts `initialized(data, rows as i64 * dims as i64)` of `train`, which the compiler cannot prove
+src/kmeans.vx:537:30: a call in `unsafe` code trusts `valid(counts, k)` of `train`, which the compiler cannot prove
+src/kmeans.vx:537:30: a call in `unsafe` code trusts `valid(current, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+src/kmeans.vx:537:30: a call in `unsafe` code trusts `valid(data, rows as i64 * dims as i64)` of `train`, which the compiler cannot prove
+src/kmeans.vx:537:30: a call in `unsafe` code trusts `valid(output, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+src/kmeans.vx:537:30: a call in `unsafe` code trusts `valid(sums, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+src/kmeans.vx:547:12: a call in `unsafe` code trusts `initialized(centers, k as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+src/kmeans.vx:547:12: a call in `unsafe` code trusts `initialized(data, rows as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+src/kmeans.vx:547:12: a call in `unsafe` code trusts `valid(centers, k as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+src/kmeans.vx:547:12: a call in `unsafe` code trusts `valid(data, rows as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+src/kmeans.vx:547:12: a call in `unsafe` code trusts `valid(out, rows)` of `assign_rows`, which the compiler cannot prove

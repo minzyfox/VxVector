@@ -171,6 +171,13 @@ requires initialized(centers, (k as i64) * (dims as i64))
   return unsafe { distance(point, offset(centers, c * width), dims, metric) };
 }
 
+// A float comparison as a branch condition crashes the prover of Vx main
+// 7e3cf6a3: it sends `0.0` to z3 in integer logic. A call keeps the
+// comparison out of the facts.
+fn positive(value: f64) -> bool {
+  return value > 0.0;
+}
+
 unsafe fn normalize(vector: *mut f32, dims: i32) -> void
 requires valid(vector, dims)
 requires initialized(vector, dims)
@@ -180,7 +187,7 @@ requires initialized(vector, dims)
     let wide = f64::from(unsafe { vector[d] });
     squared += wide * wide;
   }
-  if squared > 0.0 {
+  if positive(squared) {
     let norm = squared.sqrt();
     for d in 0..dims {
       unsafe { vector[d] = (f64::from(vector[d]) / norm) as f32; }
@@ -243,8 +250,9 @@ ensures !frees(centers)
   for position in 0..samples {
     let row: i64 = i64::from(sample_row(position, rows, offset, stride));
     let point: *const f32 = offset(data, row * width);
-    // The index goes straight to centroid_distance: Vx main drops the bound
-    // that nearest ensures after a later call. Fixed by vx-lang/Vx#2852.
+    // The index went straight to centroid_distance because Vx before
+    // vx-lang/Vx#2852 dropped the bound that nearest ensures after a later
+    // call. Vx 7e3cf6a3 includes the fix; the helper stays.
     let center: i32 = unsafe { nearest(point, centers, k, dims, metric) };
     objective += unsafe { centroid_distance(point, centers, center, k, dims, metric) };
   }
