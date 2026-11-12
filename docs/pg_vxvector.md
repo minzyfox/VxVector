@@ -94,6 +94,10 @@ Native work complete November 11, 2026, for Vx `df51035d` on macOS arm64. See th
   Sample rows and plans match the C implementation exactly. Centroids change, as the record explains.
 - [ ] Build the Linux worker and the extension, which now links the Vx object, and rerun the PostgreSQL suite and recall.
 - [x] Check the Vx finding that an assigned call result loses its `ensures`. It is [vx-lang/Vx#3040](https://github.com/vx-lang/Vx/issues/3040), already open.
+- [ ] Low priority, does not block Step 3: remove [src/data_path.c](../src/data_path.c) by moving its last parts to Vx.
+  - Export the `vxvector_*_v1` functions from Vx, and write the error messages into `vxvector_data_error` from Vx.
+  - Allocate with Vx `std::alloc`, and rework the allocation-failure test in [tests/data_path_memory.c](../tests/data_path_memory.c), which replaces `malloc` in C today.
+  - Get the clock without the Vx runtime library in the extension and Linux worker. Either `worker.c` passes it in, or both link the library.
 
 Out of scope: [pg_vxvector/src/bridge.c](../pg_vxvector/src/bridge.c) and the Rust wrapper, which depend on PostgreSQL internals, and the process and pipe code in [src/worker.c](../src/worker.c).
 
