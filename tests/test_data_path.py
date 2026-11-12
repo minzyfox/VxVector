@@ -1,10 +1,11 @@
-"""Exercise bounded source reads through the C adapter and real Vx library."""
+"""Exercise bounded source reads through the data path and the real Vx library."""
 
 import ctypes as c
 import math
 import unittest
 
 import test_kmeans
+from sampler_reference import training_rows
 
 
 class Options(c.Structure):
@@ -136,7 +137,7 @@ class DataPathTests(unittest.TestCase):
                     result = self.run_source(request, Reader(self.points(30)))
                     direct = reference.run_kmeans(
                         result["sample"], leaves=2, roots=roots, sampling_factor=3,
-                        batch_size=4, iterations=4, restarts=2, metric=metric,
+                        iterations=4, restarts=2, metric=metric,
                         spherical=metric != 0, seed=42)
                     self.assertEqual(direct[0], 0)
                     self.assertEqual(result["nodes"], direct[1])
@@ -146,6 +147,32 @@ class DataPathTests(unittest.TestCase):
                     self.assertEqual(result["sample"], [source[i] for i in result["sample_rows"]])
                     self.assertTrue(all(math.isfinite(t) and t >= 0 for t in result["timings"]))
                     self.assertGreater(result["timings"][2], 0)
+
+    def test_array_api_and_streaming_path_train_on_the_same_rows(self):
+        reference = test_kmeans.KmeansTests()
+        for count, leaves, factor in ((30, 2, 3), (200, 3, 5), (7, 2, 100)):
+            for seed in (0, 42, 2**31 - 1):
+                for metric, roots in ((0, 0), (1, 2), (2, 0)):
+                    with self.subTest(count=count, seed=seed, metric=metric, roots=roots):
+                        source = [[float(i), float((i * 7) % 11)] for i in range(count)]
+                        request = options(row_count=count, leaf_count=leaves, root_count=roots,
+                                          sampling_factor=factor, seed=seed, metric=metric,
+                                          spherical=int(metric != 0))
+                        streamed = self.run_source(request, Reader(source))
+                        direct = reference.run_kmeans(
+                            source, leaves=leaves, roots=roots, sampling_factor=factor,
+                            iterations=4, restarts=2, metric=metric,
+                            spherical=metric != 0, seed=seed)
+                        self.assertEqual(direct[0], 0)
+                        self.assertEqual(streamed["nodes"], direct[1])
+                        self.assertEqual(streamed["parents"], direct[2])
+
+    def test_sample_rows_match_the_independent_sampler(self):
+        for count, seed in ((30, 0), (30, 42), (1000, 7), (5, 2**31 - 1)):
+            with self.subTest(count=count, seed=seed):
+                result = self.run_source(options(row_count=count, seed=seed),
+                                         Reader(self.points(count)))
+                self.assertEqual(result["sample_rows"], training_rows(count, 2, 3, seed))
 
     def test_sample_is_distinct_repeatable_and_independent_of_batches(self):
         results = []

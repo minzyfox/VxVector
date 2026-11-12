@@ -1,13 +1,13 @@
-/* Check actual allocations and failure cleanup independently of the Vx runtime. */
+/* Check actual allocations and failure cleanup of the C data path. The real Vx
+ * data path runs through a wrapper that can replace its outcome with a k-means
+ * failure, which real input cannot cause. */
 #include <assert.h>
-#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "vxvector_data_path.h"
-#include "vxvector_kmeans.h"
 
 union allocation_header {
     max_align_t alignment;
@@ -15,7 +15,7 @@ union allocation_header {
 };
 
 static size_t live_bytes, peak_bytes, allocation_calls, fail_allocation;
-static int kmeans_calls, kmeans_status, nonfinite_output;
+static int run_calls, forced_outcome;
 
 static void *tracked_malloc(size_t bytes) {
     ++allocation_calls;
@@ -41,27 +41,26 @@ static void tracked_free(void *pointer) {
 
 #define malloc tracked_malloc
 #define free tracked_free
+#define vxvector_run_cpu_reason_v1 checked_run
 #include "../src/data_path.c"
 #undef malloc
 #undef free
+#undef vxvector_run_cpu_reason_v1
 
-int32_t vxvector_kmeans_v1(const float *points, int32_t rows, int32_t dims,
-                         int32_t roots, int32_t leaves, int32_t sampling,
-                         int32_t batch, int32_t iterations, int32_t restarts,
-                         int32_t metric, int32_t spherical, int32_t seed,
-                         float *nodes, int32_t *parents, int32_t *assignments,
-                         float *current, float *sums, int32_t *counts) {
-    (void)points; (void)sampling; (void)batch; (void)iterations; (void)restarts;
-    (void)metric; (void)spherical; (void)seed; (void)current; (void)sums; (void)counts;
-    ++kmeans_calls;
-    for (int32_t i = 0; i < 1 + roots + leaves; ++i) {
-        parents[i] = i == 0 ? -1 : 0;
-        for (int32_t d = 0; d < dims; ++d)
-            nodes[(size_t)i * dims + d] = nonfinite_output ? INFINITY : 0.0f;
-    }
-    for (int32_t i = 0; i < rows; ++i)
-        assignments[i] = 0;
-    return kmeans_status;
+int32_t vxvector_run_cpu_reason_v1(const struct vxvector_cpu_options *options,
+                                   const struct vxvector_cpu_plan *plan,
+                                   vxvector_next_row_fn next, void *context,
+                                   struct vxvector_input_row *row, double (*clock)(void),
+                                   const struct vxvector_cpu_buffers *buffers);
+
+int32_t checked_run(const struct vxvector_cpu_options *options,
+                    const struct vxvector_cpu_plan *plan,
+                    vxvector_next_row_fn next, void *context,
+                    struct vxvector_input_row *row, double (*clock)(void),
+                    const struct vxvector_cpu_buffers *buffers) {
+    ++run_calls;
+    int32_t outcome = vxvector_run_cpu_reason_v1(options, plan, next, context, row, clock, buffers);
+    return outcome == OUTCOME_OK && forced_outcome ? forced_outcome : outcome;
 }
 
 struct source {
@@ -86,7 +85,7 @@ static int32_t next_row(void *context, struct vxvector_input_row *row) {
 static void reset(void) {
     assert(live_bytes == 0);
     peak_bytes = allocation_calls = fail_allocation = 0;
-    kmeans_calls = kmeans_status = nonfinite_output = 0;
+    run_calls = forced_outcome = 0;
 }
 
 int main(void) {
@@ -103,7 +102,7 @@ int main(void) {
     o.memory_budget_bytes = plan.buffer_bytes - 1;
     struct source source = {.count = o.row_count};
     assert(vxvector_run_cpu_v1(&o, next_row, &source, &result, &error) == VXVECTOR_DATA_BUDGET);
-    assert(allocation_calls == 0 && source.calls == 0 && kmeans_calls == 0);
+    assert(allocation_calls == 0 && source.calls == 0 && run_calls == 0);
     o.memory_budget_bytes = plan.buffer_bytes;
 
     for (int large = 0; large < 2; ++large) {
@@ -113,7 +112,7 @@ int main(void) {
         assert(vxvector_run_cpu_v1(&o, next_row, &source, &result, &error) == VXVECTOR_DATA_OK);
         assert(peak_bytes == plan.buffer_bytes);
         assert(result.plan.sample_count == 6);
-        assert(source.calls == o.row_count + 1 && kmeans_calls == 1);
+        assert(source.calls == o.row_count + 1 && run_calls == 1);
         for (uint64_t i = 0; i < result.plan.sample_count; ++i)
             assert(result.sample[2 * i] == (float)result.sample_rows[i]);
         vxvector_free_cpu_result_v1(&result);
@@ -125,20 +124,19 @@ int main(void) {
         fail_allocation = allocation;
         source = (struct source){.count = o.row_count};
         assert(vxvector_run_cpu_v1(&o, next_row, &source, &result, &error) == VXVECTOR_DATA_MEMORY);
-        assert(live_bytes == 0 && source.calls == 0 && kmeans_calls == 0);
+        assert(live_bytes == 0 && source.calls == 0 && run_calls == 0);
         assert(result.sample == NULL && result.nodes == NULL);
     }
     reset();
     source = (struct source){.count = o.row_count, .fail = 1};
     assert(vxvector_run_cpu_v1(&o, next_row, &source, &result, &error) == VXVECTOR_DATA_SOURCE);
-    assert(live_bytes == 0 && kmeans_calls == 0);
+    assert(live_bytes == 0 && run_calls == 1);
     for (int nonfinite = 0; nonfinite < 2; ++nonfinite) {
         reset();
-        kmeans_status = nonfinite ? 0 : 1;
-        nonfinite_output = nonfinite;
+        forced_outcome = nonfinite ? OUTCOME_NONFINITE_CENTROID : OUTCOME_KMEANS_REJECTED;
         source = (struct source){.count = o.row_count};
         assert(vxvector_run_cpu_v1(&o, next_row, &source, &result, &error) == VXVECTOR_DATA_KMEANS);
-        assert(live_bytes == 0 && kmeans_calls == 1);
+        assert(live_bytes == 0 && run_calls == 1);
         assert(result.sample == NULL && result.nodes == NULL);
     }
     reset();
@@ -148,7 +146,7 @@ int main(void) {
     o.sampling_factor = 1;
     source = (struct source){.count = o.row_count};
     assert(vxvector_run_cpu_v1(&o, next_row, &source, &result, &error) == VXVECTOR_DATA_OVERFLOW);
-    assert(allocation_calls == 0 && source.calls == 0 && kmeans_calls == 0);
+    assert(allocation_calls == 0 && source.calls == 0 && run_calls == 0);
     vxvector_free_cpu_result_v1(&result);
     puts("Data path allocation, bounded-memory, and failure checks passed");
     return 0;

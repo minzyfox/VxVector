@@ -13,21 +13,25 @@ def main():
     parser.add_argument("--rows", type=int, default=10000)
     parser.add_argument("--dims", type=int, default=128)
     parser.add_argument("--leaves", type=int, default=32)
-    parser.add_argument("--batch-size", type=int, default=1024)
+    parser.add_argument("--sampling-factor", type=int, default=256)
     args = parser.parse_args()
-    if min(args.rows, args.dims, args.leaves, args.batch_size) <= 0:
+    if min(args.rows, args.dims, args.leaves, args.sampling_factor) <= 0:
         parser.error("all sizes must be positive")
     if args.leaves > args.rows:
         parser.error("leaves cannot exceed rows")
 
     project = Path(__file__).resolve().parents[1]
+    sys.path.insert(0, os.fspath(project / "scripts"))
+    from sampler_reference import table_slots
     suffix = ".dylib" if sys.platform == "darwin" else ".so"
     library = ctypes.CDLL(os.fspath(project / "build" / f"libvxvector_kmeans{suffix}"))
-    run = library.vxvector_kmeans_v1
+    run = library.vxvector_kmeans_v2
     float_ptr = ctypes.POINTER(ctypes.c_float)
     int_ptr = ctypes.POINTER(ctypes.c_int32)
-    run.argtypes = ([float_ptr] + [ctypes.c_int32] * 11
-                    + [float_ptr, int_ptr, int_ptr, float_ptr, float_ptr, int_ptr])
+    long_ptr = ctypes.POINTER(ctypes.c_int64)
+    run.argtypes = ([float_ptr] + [ctypes.c_int32] * 10
+                    + [float_ptr, int_ptr, int_ptr, float_ptr, float_ptr, int_ptr,
+                       long_ptr, long_ptr])
     run.restype = ctypes.c_int32
 
     rows, dims, leaves = args.rows, args.dims, args.leaves
@@ -43,14 +47,17 @@ def main():
     current = (ctypes.c_float * (leaves * dims))()
     sums = (ctypes.c_float * (leaves * dims))()
     counts = (ctypes.c_int32 * leaves)()
+    samples = min(rows, leaves * args.sampling_factor)
+    sample_rows = (ctypes.c_int64 * samples)()
+    sample_table = (ctypes.c_int64 * table_slots(samples))()
 
     start = time.perf_counter()
-    status = run(points, rows, dims, 0, leaves, 256, args.batch_size,
+    status = run(points, rows, dims, 0, leaves, args.sampling_factor,
                  10, 1, 0, 0, 42, nodes, parents, assignments,
-                 current, sums, counts)
+                 current, sums, counts, sample_rows, sample_table)
     seconds = time.perf_counter() - start
     if status != 0:
-        raise RuntimeError(f"vxvector_kmeans_v1 returned {status}")
+        raise RuntimeError(f"vxvector_kmeans_v2 returned {status}")
     print(f"rows={rows} dims={dims} leaves={leaves} seconds={seconds:.4f} "
           f"rows_per_second={rows / seconds:.1f}")
 

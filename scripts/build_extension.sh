@@ -34,7 +34,7 @@ if ! docker inspect "$builder" >/dev/null 2>&1; then
 else
   docker start "$builder" >/dev/null
 fi
-COPYFILE_DISABLE=1 tar -cf - -C "$project_root" pg_vxvector src include | \
+COPYFILE_DISABLE=1 tar -cf - -C "$project_root" pg_vxvector src include build/linux/kmeans.o | \
   docker exec -i "$builder" tar -xf - -C /opt/vxvector-src
 docker exec -w /opt/vxvector-src/pg_vxvector "$builder" sh -c \
   'PGRX_PG_CONFIG_PATH=/usr/lib/postgresql/17/bin/pg_config cargo build --locked -j 2' \

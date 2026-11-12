@@ -1,6 +1,6 @@
 # VxVector active roadmap
 
-Updated November 9, 2026.
+Updated November 11, 2026.
 This is the single source of truth for next steps, priorities, and milestone completion.
 The [CPU correctness document](milestone_4_cpu_correctness.md) contains reference procedures and historical evidence.
 The [earlier roadmap and research assessments](roadmap_reference.md) preserve design ideas without defining additional execution gates.
@@ -17,17 +17,20 @@ CPU SIMD optimization is no longer a prerequisite for GPU execution.
 Full kernel proofs and hosted CI remain useful work, but do not block a GPU experiment independently of relevant correctness failures.
 Compiler and runtime improvements should follow concrete application failures with focused regression tests.
 
+Application logic belongs in Vx. C remains only for PostgreSQL internals, process and pipe handling, the specific operations Vx cannot yet express, and deliberate exceptions such as allocation that tests must intercept.
+Each Vx gap needs a recorded issue, and each exception a recorded reason, rather than a silent C fallback.
+
 ## Current state and evidence limits
 
-The source review examined VxVector `8f31bb9` and Vx main `9916ce67`.
-The project currently pins Vx `31296d42` in [vx-revision.txt](../vx-revision.txt).
-Choose and validate a compiler revision before changing that pin.
+The project pins Vx `df51035d` (main, November 11) in [vx-revision.txt](../vx-revision.txt).
+The [Step 2 record](step2_data_path_vx_2026-11-11.md) validates the current kernel and data path with that compiler on native macOS arm64.
 
 The CPU core, bounded sampling adapter, separate worker, and PostgreSQL/VectorChord integration are implemented.
-Saved native and Linux build manifests identify Vx `c9612a1f` and an earlier kernel source hash.
-They do not validate the November 9 kernel refactoring or the current pin.
-Earlier CPU correctness, recall, and objective results remain evidence for their recorded source and compiler revisions.
-No fresh build, database test, or GPU execution was performed during this roadmap update.
+The adapter's logic is in Vx since Step 2. Its kernel ABI is `vxvector_kmeans_v2`.
+The installed Linux worker and saved Linux build manifests still identify Vx `c9612a1f` and an earlier kernel source hash.
+The extension build now links the Vx object and has not been run since that change.
+PostgreSQL, recall, and objective results remain evidence for their recorded source and compiler revisions.
+No GPU execution has been performed.
 
 The NVIDIA-oriented [GPU prototype](../src/gpu_lloyd.vx) is not a validated Metal implementation.
 Its ordinary loops and compilation result do not establish useful GPU parallelism.
@@ -55,19 +58,54 @@ Keep CPU forcing and GPU requiring modes available for tests and diagnostics.
 
 ## Step 1: refresh the CPU correctness baseline
 
-This is the first implementation task.
+Complete November 9, 2026, for Vx `7e3cf6a3` on macOS arm64. See the [Step 1 record](step1_cpu_baseline_2026-11-09.md).
 
-- [ ] Select the Vx revision and rebuild its compiler/runtime and the current VxVector kernel.
-- [ ] Record matching compiler, source, object, and worker hashes.
-- [ ] Run native unit tests, independent Lloyd/Faiss checks, edge cases, sanitizers, and contract/code-generation mutations.
-- [ ] Confirm the intended flat code generator and audit the actual current kernel.
-- [ ] Record relevant remaining proof gaps without treating old milestone prose as current compiler evidence.
+- [x] Select the Vx revision and rebuild its compiler/runtime and the current VxVector kernel.
+- [x] Record matching compiler, source, object, and worker hashes.
+- [x] Run native unit tests, independent Lloyd/Faiss checks, edge cases, sanitizers, and contract/code-generation mutations.
+- [x] Confirm the intended flat code generator and audit the actual current kernel.
+- [x] Record relevant remaining proof gaps without treating old milestone prose as current compiler evidence.
+
+The new compiler crashed on a float branch condition in `normalize`; the kernel works around it, and the reproduction is filed as [vx-lang/Vx#3145](https://github.com/vx-lang/Vx/issues/3145).
 
 Exit: the current source has a reproducible CPU reference and fallback.
 Revalidate PostgreSQL installation and recall when packaging the refreshed worker.
 Do not replace an installed worker merely to begin standalone Metal development.
 
-## Step 2: execute standalone L2 clustering on Apple Metal
+## Step 2: convert the C data path to Vx
+
+[src/data_path.c](../src/data_path.c) holds the data-path logic in C: option checks, buffer sizing, the memory budget, the sampler, row validation, and batch copying.
+The kernel has a second sampler, the stride permutation in `train`, so two code paths choose samples.
+Convert this layer to Vx before GPU work so that one sampling policy feeds both backends and every GPU comparison.
+This is items D1 and D2 of the [November 8 usage review](vx_usage_review_2026-11-08.md), extended to the whole file.
+
+Native work complete November 11, 2026, for Vx `df51035d` on macOS arm64. See the [Step 2 record](step2_data_path_vx_2026-11-11.md).
+
+- [x] Convert `vxvector_plan_cpu_v1` to Vx: option validation, overflow-checked buffer sizing, and the memory-budget check.
+- [x] Convert the sampler to Vx: SplitMix64, Floyd's selection with its hash table, and the position sort.
+- [x] Remove the stride permutation from `train`, so that the converted sampler is the only one.
+- [x] Convert row validation (null rows, type, dimensions, non-finite values), batch copying, and the final centroid finiteness check.
+- [x] Prove that sampled row indices are less than `rows`. Add a mutation that fails each proof.
+- [ ] Prove that buffer sizes do not overflow. Tested, not proved: the prover ignores `/` and cannot use the `u64` constants.
+- [x] Remove `batch_size` from the kernel ABI. Keep it in the row reader. Bump the ABI version if the kernel signature changes.
+- [x] Keep the `vxvector_plan_cpu_v1`, `vxvector_run_cpu_v1`, and `vxvector_free_cpu_result_v1` entry points, error codes, and messages, so that `worker.c` and `bridge.c` stay unchanged.
+- [x] Keep in C only what Vx cannot express, or record why not. Allocation, the clock, and the message text stay in C by choice, for the reasons in the record. The row-reader callback works from Vx.
+- [x] Rerun the Step 1 checks and the data-path tests, including allocation failure and sanitizers, and record new hashes.
+  Sample rows and plans match the C implementation exactly. Centroids change, as the record explains.
+- [ ] Build the Linux worker and the extension, which now links the Vx object, and rerun the PostgreSQL suite and recall.
+- [x] Check the Vx finding that an assigned call result loses its `ensures`. It is [vx-lang/Vx#3040](https://github.com/vx-lang/Vx/issues/3040), already open.
+- [ ] Low priority, does not block Step 3: remove [src/data_path.c](../src/data_path.c) by moving its last parts to Vx.
+  - Export the `vxvector_*_v1` functions from Vx, and write the error messages into `vxvector_data_error` from Vx.
+  - Allocate with Vx `std::alloc`, and rework the allocation-failure test in [tests/data_path_memory.c](../tests/data_path_memory.c), which replaces `malloc` in C today.
+  - Get the clock without the Vx runtime library in the extension and Linux worker. Either `worker.c` passes it in, or both link the library.
+
+Out of scope: [pg_vxvector/src/bridge.c](../pg_vxvector/src/bridge.c) and the Rust wrapper, which depend on PostgreSQL internals, and the process and pipe code in [src/worker.c](../src/worker.c).
+
+Exit: `src/data_path.c` contains only Vx gaps that have recorded issues, or exceptions with recorded reasons. The array API and the streaming adapter choose the same sample for the same seed and rows.
+PostgreSQL and recall revalidation still waits for packaging of the refreshed worker, as in Step 1.
+The Linux build needs a check before then, because the extension build changed.
+
+## Step 3: execute standalone L2 clustering on Apple Metal
 
 Run this directly on macOS, outside PostgreSQL and Linux Docker.
 
@@ -83,7 +121,7 @@ Run this directly on macOS, outside PostgreSQL and Linux Docker.
 Exit: one real L2 training operation executes on Apple GPU with correct bounded results and cleanup.
 Do not add transfer overlap, multiple devices, or general tuning infrastructure to this first result.
 
-## Step 3: automatic selection and CPU fallback
+## Step 4: automatic selection and CPU fallback
 
 - [ ] Add a backend capability/availability probe and implement the three selection modes above.
 - [ ] Test `auto` with GPU present, unavailable, and incompatible with a requested capability.
@@ -93,7 +131,7 @@ Do not add transfer overlap, multiple devices, or general tuning infrastructure 
 
 Exit: the same training request runs on a supported GPU or selects CPU before training when GPU execution is unavailable.
 
-## Step 4: complete standalone GPU semantics and validation
+## Step 5: complete standalone GPU semantics and validation
 
 - [ ] Extend the supported path to cosine, inner product, normalization, sampling, restarts, and flat/two-level output.
 - [ ] Keep unsupported combinations on the CPU in `auto`; reject them in required GPU mode.
@@ -105,7 +143,7 @@ Exit: the same training request runs on a supported GPU or selects CPU before tr
 Exit: supported GPU options preserve the application's defined behavior, with explicit CPU selection for unsupported requests.
 No performance advantage is assumed from successful device execution.
 
-## Step 5: PostgreSQL integration and final-index quality
+## Step 6: PostgreSQL integration and final-index quality
 
 The current database runs in a Linux Docker container.
 It cannot directly execute a native macOS Metal worker.
@@ -127,7 +165,7 @@ Neither path is established by existing Linux worker tests.
 
 Exit: the PostgreSQL workflow uses the GPU when supported and CPU otherwise, with observable selection and validated index quality.
 
-## Step 6: performance and later backends
+## Step 7: performance and later backends
 
 - [ ] Establish an optimized CPU baseline with `-O3` and inspect its generated instructions.
 - [ ] Profile GPU assignment, centroid updates, transfers, allocation, and launch overhead on native hardware.
@@ -149,6 +187,9 @@ Exit: reproducible end-to-end measurements support each performance claim, inclu
 - [Bounded data-path implementation record](milestone_2_data_path.md).
 - [CPU PostgreSQL integration record](milestone_3_cpu_integration.md).
 - [Naming and rename-validation record](rename_vxvector.md).
+- [Step 1 CPU baseline record](step1_cpu_baseline_2026-11-09.md).
+- [Step 2 data path record](step2_data_path_vx_2026-11-11.md).
+- [November 8 Vx usage review](vx_usage_review_2026-11-08.md) and [Vx issue drafts](vx_issue_drafts_2026-11-08.md).
 
 These references supply procedures and evidence. They do not add prerequisites or override this sequence.
 Record new validation under its exact source/compiler/backend versions before marking an active step complete.
