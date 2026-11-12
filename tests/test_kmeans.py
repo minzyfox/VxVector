@@ -10,6 +10,8 @@ from pathlib import Path
 
 
 PROJECT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, os.fspath(PROJECT / "scripts"))
+from sampler_reference import table_slots, training_rows  # noqa: E402
 SUFFIX = ".dylib" if sys.platform == "darwin" else ".so"
 LIBRARY = PROJECT / "build" / f"libvxvector_kmeans{SUFFIX}"
 
@@ -44,17 +46,19 @@ class KmeansTests(unittest.TestCase):
         if not LIBRARY.exists():
             raise RuntimeError("build the library with scripts/build.sh first")
         cls.library = ctypes.CDLL(os.fspath(LIBRARY))
-        cls.run_function = cls.library.vxvector_kmeans_v1
+        cls.run_function = cls.library.vxvector_kmeans_v2
         float_ptr = ctypes.POINTER(ctypes.c_float)
         int_ptr = ctypes.POINTER(ctypes.c_int32)
+        long_ptr = ctypes.POINTER(ctypes.c_int64)
         cls.run_function.argtypes = (
-            [float_ptr] + [ctypes.c_int32] * 11
-            + [float_ptr, int_ptr, int_ptr, float_ptr, float_ptr, int_ptr]
+            [float_ptr] + [ctypes.c_int32] * 10
+            + [float_ptr, int_ptr, int_ptr, float_ptr, float_ptr, int_ptr,
+               long_ptr, long_ptr]
         )
         cls.run_function.restype = ctypes.c_int32
 
     def run_kmeans(self, points, leaves, roots=0, sampling_factor=256,
-                   batch_size=100000, iterations=10, restarts=1, metric=0,
+                   iterations=10, restarts=1, metric=0,
                    spherical=False, seed=42):
         rows = len(points)
         dims = len(points[0])
@@ -67,10 +71,14 @@ class KmeansTests(unittest.TestCase):
         current = (ctypes.c_float * (leaves * dims))()
         sums = (ctypes.c_float * (leaves * dims))()
         counts = (ctypes.c_int32 * leaves)()
+        samples = max(1, min(rows, leaves * sampling_factor))
+        sample_rows = (ctypes.c_int64 * samples)()
+        sample_table = (ctypes.c_int64 * table_slots(samples))()
         status = self.run_function(
             point_buffer, rows, dims, roots, leaves, sampling_factor,
-            batch_size, iterations, restarts, metric, int(spherical), seed,
+            iterations, restarts, metric, int(spherical), seed,
             nodes, parents, assignments, current, sums, counts,
+            sample_rows, sample_table,
         )
         vectors = [list(nodes[i * dims:(i + 1) * dims])
                    for i in range(node_count)]
@@ -79,7 +87,7 @@ class KmeansTests(unittest.TestCase):
     def test_l2_centroids_match_exhaustive_reference(self):
         points = [[0, 0], [0, 1], [10, 10], [10, 11]]
         status, nodes, parents, labels = self.run_kmeans(
-            points, leaves=2, batch_size=2, restarts=3
+            points, leaves=2, restarts=3
         )
         self.assertEqual(status, 0)
         self.assertEqual(parents, [-1, 0, 0])
@@ -90,19 +98,23 @@ class KmeansTests(unittest.TestCase):
         self.assertEqual(labels[2], labels[3])
         self.assertNotEqual(labels[0], labels[2])
 
-    def test_batch_size_preserves_the_result(self):
-        points = [[float(i // 6 * 10), float(i % 6)] for i in range(12)]
-        small = self.run_kmeans(points, leaves=2, batch_size=1, restarts=3)
-        large = self.run_kmeans(points, leaves=2, batch_size=100, restarts=3)
-        self.assertEqual(small, large)
-
     def test_sampling_uses_the_requested_rows(self):
         points = [[float(i)] for i in range(10)]
-        few = self.run_kmeans(points, leaves=1, sampling_factor=2, seed=0)
+        for seed in (0, 1, 42):
+            with self.subTest(seed=seed):
+                rows = training_rows(10, 1, 2, seed)
+                self.assertEqual(len(rows), 2)
+                few = self.run_kmeans(points, leaves=1, sampling_factor=2, seed=seed)
+                self.assertEqual(few[0], 0)
+                self.assertAlmostEqual(few[1][1][0], sum(rows) / 2, places=5)
         all_rows = self.run_kmeans(points, leaves=1, sampling_factor=10, seed=0)
-        self.assertEqual(few[0], 0)
-        self.assertAlmostEqual(few[1][1][0], 0.5)
         self.assertAlmostEqual(all_rows[1][1][0], 4.5)
+
+    def test_seeds_choose_different_rows_of_a_large_input(self):
+        points = [[float(i)] for i in range(1000)]
+        means = {self.run_kmeans(points, leaves=1, sampling_factor=3, seed=seed)[1][1][0]
+                 for seed in range(5)}
+        self.assertEqual(len(means), 5)
 
     def test_restarts_do_not_increase_training_cost(self):
         points = [[float(i), float((i * 7) % 11)] for i in range(12)]
@@ -135,7 +147,7 @@ class KmeansTests(unittest.TestCase):
             (10, 10), (10, 11), (11, 10), (11, 11),
         )]
         status, nodes, parents, labels = self.run_kmeans(
-            points, leaves=4, roots=2, batch_size=3, restarts=2
+            points, leaves=4, roots=2, restarts=2
         )
         self.assertEqual(status, 0)
         self.assertEqual(len(nodes), 7)

@@ -1,16 +1,22 @@
-// Standalone k-means over row-major float32 arrays.
-// The caller owns every buffer. See include/vxvector_kmeans.h for capacities.
+// K-means over row-major float32 arrays, and the streaming data path that
+// collects its sample. The caller owns every buffer. See
+// include/vxvector_kmeans.h and include/vxvector_data_path.h for capacities.
 //
 // Each internal function that reads or writes through a raw pointer is an
 // `unsafe fn` whose `requires` state the capacities it needs. The checker proves
-// those clauses at each call inside this file. Only the C boundary,
-// vxvector_kmeans_v1, trusts its caller. `vxc --audit` lists what is trusted.
+// those clauses at each call inside this file. Only the C boundaries,
+// vxvector_kmeans_v2, vxvector_plan_cpu_reason_v1 and vxvector_run_cpu_reason_v1,
+// trust their callers. `vxc --audit` lists what is trusted.
 //
 // Pointer offsets below are products of i64 locals, such as `c * width`. The
 // pointer checker of Vx main tracks such an offset, but not one that contains a
 // call such as `i64::from(c) * width`, and it drops a fact when a variable that
 // the fact names goes out of scope. So the loops whose facts matter count with
 // i64 locals that stay in scope.
+//
+// This object needs nothing from the Vx runtime library. The PostgreSQL
+// extension links it for vxvector_plan_cpu_reason_v1, and src/data_path.c passes
+// in the clock, so that it stays that way.
 import core::convert;
 import core::num;
 import core::ptr;
@@ -54,23 +60,181 @@ ensures initialized(sums, size)
   }
 }
 
-fn greatest_common_divisor(left: i32, right: i32) -> i32 {
-  let mut a = left;
-  let mut b = right;
-  while b != 0 {
-    let remainder = a % b;
-    a = b;
-    b = remainder;
-  }
-  return a;
+// i32 dimensions keep the widened row-major arithmetic within i64.
+fn buffer_index(row: i64, rows: i64, dims: i64, d: i64) -> i64
+requires rows > 0 && rows <= 2147483647 && dims > 0 && dims <= 2147483647
+requires row >= 0 && row < rows && d >= 0 && d < dims
+ensures return >= 0 && return < rows * dims
+{
+  return row * dims + d;
 }
 
-fn sample_row(position: i32, rows: i32, offset: i32, stride: i32) -> i32
-requires rows > 0 && position >= 0 && offset >= 0 && stride >= 0
-ensures return >= 0 && return < rows
+// ---------------------------------------------------------------------------
+// Sampling. One sampler chooses the training rows for the array API and for
+// the streaming data path, so both train on the same rows for the same seed.
+
+// An empty slot of the sampler's table. Row indices are never negative.
+const EMPTY_SLOT: i64 = -1;
+
+// One SplitMix64 output and the state that follows it.
+struct Draw {
+  value: u64,
+  state: u64,
+}
+
+// SplitMix64 (Steele, Lea and Flood, 2014) defines the seed sequence
+// independently of the platform C library. Vx has no hexadecimal literals: the
+// constants are 0x9e3779b97f4a7c15, 0xbf58476d1ce4e5b9 and 0x94d049bb133111eb.
+fn splitmix64(state: u64) -> Draw {
+  let golden: u64 = 11400714819323198485;
+  let first: u64 = 13787848793156543929;
+  let second: u64 = 10723151780598845931;
+  let shift_first: u64 = 30;
+  let shift_second: u64 = 27;
+  let shift_last: u64 = 31;
+  let next = state.wrapping_add(golden);
+  let mut z = next;
+  z = (z ^ (z >> shift_first)).wrapping_mul(first);
+  z = (z ^ (z >> shift_second)).wrapping_mul(second);
+  return Draw { value: z ^ (z >> shift_last), state: next };
+}
+
+// A uniform value below bound. Rejecting values below 2^64 mod bound removes
+// the bias of the remainder.
+fn random_below(state: u64, bound: u64) -> Draw
+requires bound > 0
 {
-  let index = i64::from(offset) + i64::from(position) * i64::from(stride);
-  return (index % i64::from(rows)) as i32;
+  let zero: u64 = 0;
+  let threshold = zero.wrapping_sub(bound) % bound;
+  let mut draw = splitmix64(state);
+  while draw.value < threshold {
+    draw = splitmix64(draw.state);
+  }
+  return Draw { value: draw.value % bound, state: draw.state };
+}
+
+// The sampler's table size: the smallest power of two that is at least twice
+// count, so that at most half of the slots are full.
+fn table_slots(count: i64) -> i64
+requires count > 0 && count <= 2147483647
+ensures return > count
+{
+  let mut slots = 1i64;
+  while slots < 2i64 * count invariant slots >= 1i64 && slots < 4i64 * count {
+    slots = slots * 2i64;
+  }
+  return slots;
+}
+
+// The first slot to probe for row. The golden-ratio multiplier spreads
+// neighboring rows over the table. With a power-of-two slots, the remainder
+// keeps the low bits of the product.
+fn first_slot(row: i64, slots: i64) -> i64
+requires slots > 0
+ensures return >= 0 && return < slots
+{
+  let golden: u64 = 11400714819323198485;
+  let slot = ((row as u64).wrapping_mul(golden) % (slots as u64)) as i64;
+  // The remainder is below slots. The prover does not follow the conversions
+  // to and from u64, so this check states the bound.
+  if slot < 0 || slot >= slots {
+    return 0;
+  }
+  return slot;
+}
+
+// The slot that holds row, or else the empty slot where row belongs. The
+// table must have an empty slot.
+unsafe fn find_slot(table: *const i64, slots: i64, row: i64) -> i64
+requires slots > 0
+requires valid(table, slots)
+requires initialized(table, slots)
+ensures return >= 0 && return < slots
+ensures !frees(table)
+{
+  let mut slot = first_slot(row, slots);
+  let mut value: i64 = unsafe { table[slot] };
+  while value != EMPTY_SLOT && value != row invariant slot >= 0 && slot < slots {
+    slot = slot + 1;
+    if slot == slots {
+      slot = 0;
+    }
+    value = unsafe { table[slot] };
+  }
+  return slot;
+}
+
+// Floyd's algorithm chooses count distinct rows of 0..rows with O(count)
+// storage, and writes them to chosen in the order of selection. table is
+// scratch with more slots than count.
+unsafe fn select_rows(rows: i64, count: i64, seed: u64, table: *mut i64, slots: i64,
+chosen: *mut i64) -> void
+requires count > 0 && count <= rows && slots > count
+requires valid(table, slots)
+requires valid(chosen, count)
+ensures initialized(chosen, count)
+ensures !frees(table)
+ensures !frees(chosen)
+{
+  for i in 0i64..slots invariant initialized(table, i) {
+    unsafe { table[i] = EMPTY_SLOT; }
+  }
+  let mut state = seed;
+  for i in 0i64..count
+  invariant initialized(table, slots)
+  invariant initialized(chosen, i) {
+    // Step i draws from 0..=last. A row drawn before is replaced by last,
+    // which no earlier step could draw.
+    let last: i64 = rows - count + i;
+    let draw = random_below(state, (last + 1i64) as u64);
+    state = draw.state;
+    let mut row: i64 = draw.value as i64;
+    let mut slot: i64 = unsafe { find_slot(table as *const i64, slots, row) };
+    if unsafe { table[slot] } != EMPTY_SLOT {
+      row = last;
+      slot = unsafe { find_slot(table as *const i64, slots, row) };
+    }
+    unsafe { table[slot] = row; }
+    unsafe { chosen[i] = row; }
+  }
+}
+
+// The training rows of rows rows: every row in order when samples is all of
+// them, and Floyd's selection otherwise. Floyd's selection of every row also
+// gives them in order, so the first case only skips the table. The kernel and
+// the data path both choose this way.
+unsafe fn choose_rows(rows: i64, samples: i64, seed: u64, table: *mut i64, slots: i64,
+chosen: *mut i64) -> void
+requires samples > 0 && samples <= rows && slots > samples
+requires valid(table, slots)
+requires valid(chosen, samples)
+ensures initialized(chosen, samples)
+ensures !frees(table)
+ensures !frees(chosen)
+{
+  if samples == rows {
+    for i in 0i64..samples invariant initialized(chosen, i) {
+      unsafe { chosen[i] = i; }
+    }
+    return;
+  }
+  unsafe { select_rows(rows, samples, seed, table, slots, chosen); }
+}
+
+// The row of data at sample position position.
+unsafe fn sample_row(chosen: *const i64, samples: i32, position: i32, rows: i32) -> i64
+requires samples > 0 && position >= 0 && position < samples && rows > 0
+requires valid(chosen, samples)
+requires initialized(chosen, samples)
+ensures return >= 0i64 && return < (rows as i64)
+{
+  let row: i64 = unsafe { chosen[position] };
+  // choose_rows writes rows below rows. The prover cannot see what memory
+  // holds, so this check states the bound.
+  if row < 0i64 || row >= (rows as i64) {
+    return 0i64;
+  }
+  return row;
 }
 
 // Spreads centers 0..k evenly over positions 0..samples, shifted by shift.
@@ -84,6 +248,9 @@ ensures return >= 0 && return < samples
   // spread >= 0, this line returns r unchanged.
   return ((r + i64::from(samples)) % i64::from(samples)) as i32;
 }
+
+// ---------------------------------------------------------------------------
+// Lloyd's algorithm.
 
 unsafe fn distance(left: *const f32, right: *const f32,
 dims: i32, metric: &DistanceMetric) -> f64
@@ -171,9 +338,9 @@ requires initialized(centers, (k as i64) * (dims as i64))
   return unsafe { distance(point, offset(centers, c * width), dims, metric) };
 }
 
-// A float comparison as a branch condition crashes the prover of Vx main
-// 7e3cf6a3: it sends `0.0` to z3 in integer logic. A call keeps the
-// comparison out of the facts.
+// A float comparison as a branch condition crashes the prover: it sends `0.0`
+// to z3 in integer logic (vx-lang/Vx#3145, open on df51035d). A call keeps
+// the comparison out of the facts.
 fn positive(value: f64) -> bool {
   return value > 0.0;
 }
@@ -193,15 +360,6 @@ requires initialized(vector, dims)
       unsafe { vector[d] = (f64::from(vector[d]) / norm) as f32; }
     }
   }
-}
-
-// i32 dimensions keep the widened row-major arithmetic within i64.
-fn buffer_index(row: i64, rows: i64, dims: i64, d: i64) -> i64
-requires rows > 0 && rows <= 2147483647 && dims > 0 && dims <= 2147483647
-requires row >= 0 && row < rows && d >= 0 && d < dims
-ensures return >= 0 && return < rows * dims
-{
-  return row * dims + d;
 }
 
 // Adds point to the sum of centroid center, and counts it.
@@ -234,12 +392,13 @@ requires initialized(sums, (k as i64) * (dims as i64))
 // The sum of the distances from the sampled rows of data to their nearest of
 // the k centers.
 unsafe fn sample_objective(data: *const f32, rows: i32, dims: i32, k: i32,
-samples: i32, offset: i32, stride: i32, metric: &DistanceMetric,
+samples: i32, chosen: *const i64, metric: &DistanceMetric,
 centers: *const f32) -> f64
 requires k > 0 && dims > 0 && rows > 0 && samples > 0
-requires offset >= 0 && stride >= 0
 requires valid(data, (rows as i64) * (dims as i64))
 requires initialized(data, (rows as i64) * (dims as i64))
+requires valid(chosen, samples)
+requires initialized(chosen, samples)
 requires valid(centers, (k as i64) * (dims as i64))
 requires initialized(centers, (k as i64) * (dims as i64))
 ensures !frees(data)
@@ -248,11 +407,8 @@ ensures !frees(centers)
   let width = i64::from(dims);
   let mut objective: f64 = 0.0;
   for position in 0..samples {
-    let row: i64 = i64::from(sample_row(position, rows, offset, stride));
+    let row: i64 = unsafe { sample_row(chosen, samples, position, rows) };
     let point: *const f32 = offset(data, row * width);
-    // The index went straight to centroid_distance because Vx before
-    // vx-lang/Vx#2852 dropped the bound that nearest ensures after a later
-    // call. Vx 7e3cf6a3 includes the fix; the helper stays.
     let center: i32 = unsafe { nearest(point, centers, k, dims, metric) };
     objective += unsafe { centroid_distance(point, centers, center, k, dims, metric) };
   }
@@ -279,33 +435,6 @@ requires valid(out, rows)
   }
 }
 
-// The first row that the sampler visits.
-fn sampler_offset(seed: i32, rows: i32) -> i32
-requires seed >= 0 && rows > 0
-ensures return >= 0 && return < rows
-{
-  return (i64::from(seed) % i64::from(rows)) as i32;
-}
-
-// The step between visited rows. It is coprime to rows, so the positions
-// 0..rows visit each row once.
-fn sampler_stride(seed: i32, rows: i32) -> i32
-requires seed >= 0 && rows > 0
-ensures return >= 1
-{
-  if rows == 1 {
-    return 1;
-  }
-  let mut stride = (1 + ((i64::from(seed) * 48271) % i64::from(rows - 1))) as i32;
-  while greatest_common_divisor(stride, rows) != 1 invariant stride >= 1 && stride < rows {
-    stride = stride + 1;
-    if stride >= rows {
-      stride = 1;
-    }
-  }
-  return stride;
-}
-
 // The result of one restart. status is 1 for float32 centroid-sum overflow.
 struct RestartResult {
   status: i32,
@@ -313,22 +442,23 @@ struct RestartResult {
 }
 
 // Runs one restart of Lloyd's algorithm and leaves its centroids in current.
-// data holds rows row-major vectors. The sampler takes position p to row
-// (offset + p * stride) % rows.
+// data holds rows row-major vectors. Sample position p is row chosen[p].
 unsafe fn run_restart(data: *const f32, rows: i32, dims: i32, k: i32,
-samples: i32, restart: i32, batch_size: i32, iterations: i32,
-metric: &DistanceMetric, spherical: bool, offset: i32, stride: i32,
+samples: i32, chosen: *const i64, restart: i32, iterations: i32,
+metric: &DistanceMetric, spherical: bool,
 current: *mut f32, sums: *mut f32, counts: *mut i32) -> RestartResult
 requires k > 0 && dims > 0 && rows > 0
-requires samples > 0 && restart >= 0 && batch_size > 0
-requires offset >= 0 && stride >= 0
+requires samples > 0 && restart >= 0
 requires valid(data, (rows as i64) * (dims as i64))
 requires initialized(data, (rows as i64) * (dims as i64))
+requires valid(chosen, samples)
+requires initialized(chosen, samples)
 requires valid(current, (k as i64) * (dims as i64))
 requires valid(sums, (k as i64) * (dims as i64))
 requires valid(counts, k)
 ensures initialized(current, (k as i64) * (dims as i64))
 ensures !frees(data)
+ensures !frees(chosen)
 ensures !frees(current)
 ensures !frees(sums)
 ensures !frees(counts)
@@ -341,7 +471,7 @@ ensures !frees(counts)
   invariant seeded >= 0i64 && seeded <= count
   invariant initialized(current, seeded * width) {
     let position: i32 = spaced_position(seeded, k, samples, i64::from(restart) * 104729);
-    let row: i64 = i64::from(sample_row(position, rows, offset, stride));
+    let row: i64 = unsafe { sample_row(chosen, samples, position, rows) };
     let centroid: *mut f32 = offset_mut(current, seeded * width);
     // Trusted: the header requires current and data to be separate buffers,
     // but Vx's !overlaps takes one length for both, and the two buffers have
@@ -358,27 +488,16 @@ ensures !frees(counts)
     unsafe { zero_counts(counts, k); }
     unsafe { zero_sums(sums, count * width); }
 
-    // batch_end is declared outside the loop: Vx drops the facts about
-    // batch_start = batch_end when the scope of batch_end ends.
-    let mut batch_start = 0;
-    let mut batch_end = 0;
-    while batch_start < samples invariant batch_start >= 0 {
-      batch_end = samples;
-      if batch_size < samples - batch_start {
-        batch_end = batch_start + batch_size;
+    for position in 0..samples {
+      let row: i64 = unsafe { sample_row(chosen, samples, position, rows) };
+      let point: *const f32 = offset(data, row * width);
+      let center: i32 = unsafe { nearest(point, current as *const f32, k, dims, metric) };
+      let accumulation: i32 = unsafe {
+        accumulate_point(point, sums, counts, center, k, dims)
+      };
+      if accumulation != 0 {
+        return RestartResult { status: accumulation, objective: 0.0 };
       }
-      for position in batch_start..batch_end {
-        let row: i64 = i64::from(sample_row(position, rows, offset, stride));
-        let point: *const f32 = offset(data, row * width);
-        let center: i32 = unsafe { nearest(point, current as *const f32, k, dims, metric) };
-        let accumulation: i32 = unsafe {
-          accumulate_point(point, sums, counts, center, k, dims)
-        };
-        if accumulation != 0 {
-          return RestartResult { status: accumulation, objective: 0.0 };
-        }
-      }
-      batch_start = batch_end;
     }
 
     let mut updated = 0i64;
@@ -387,7 +506,7 @@ ensures !frees(counts)
       let centroid: *mut f32 = offset_mut(current, updated * width);
       if cluster == 0 {
         let position: i32 = ((updated + i64::from(iteration)) % i64::from(samples)) as i32;
-        let row: i64 = i64::from(sample_row(position, rows, offset, stride));
+        let row: i64 = unsafe { sample_row(chosen, samples, position, rows) };
         // Trusted for the same reason as the copy that seeds current.
         unsafe { copy_vector(centroid, offset(data, row * width), width); }
       } else {
@@ -404,49 +523,46 @@ ensures !frees(counts)
   }
 
   let objective: f64 = unsafe { sample_objective(data, rows, dims, k, samples,
-    offset, stride, metric, current as *const f32) };
+    chosen, metric, current as *const f32) };
   return RestartResult { status: 0, objective: objective };
 }
 
-// Trains k centroids from rows row-major vectors at data, and writes them to
-// output.
-unsafe fn train(data: *const f32, rows: i32, dims: i32,
-k: i32, sampling_factor: i32, batch_size: i32,
+// Trains k centroids from samples of the rows row-major vectors at data, and
+// writes them to output. chosen and table are sampler scratch.
+unsafe fn train(data: *const f32, rows: i32, dims: i32, k: i32, samples: i32,
 iterations: i32, restarts: i32, metric: &DistanceMetric, spherical: bool,
-seed: i32, output: *mut f32,
-current: *mut f32, sums: *mut f32, counts: *mut i32) -> i32
+seed: i32, output: *mut f32, current: *mut f32, sums: *mut f32, counts: *mut i32,
+chosen: *mut i64, table: *mut i64, slots: i64) -> i32
 requires k > 0 && dims > 0 && rows >= k
-requires sampling_factor > 0 && batch_size > 0 && restarts > 0 && seed >= 0
+requires samples > 0 && samples <= rows && restarts > 0 && seed >= 0
+requires slots > (samples as i64)
 requires valid(data, (rows as i64) * (dims as i64))
 requires initialized(data, (rows as i64) * (dims as i64))
 requires valid(output, (k as i64) * (dims as i64))
 requires valid(current, (k as i64) * (dims as i64))
 requires valid(sums, (k as i64) * (dims as i64))
 requires valid(counts, k)
+requires valid(chosen, samples)
+requires valid(table, slots)
 requires !overlaps(output, current, (k as i64) * (dims as i64))
 {
   let count = i64::from(k);
   let width = i64::from(dims);
   let size = count * width;
-  let requested = i64::from(k) * i64::from(sampling_factor);
-  let mut samples = rows;
-  if requested < i64::from(rows) {
-    samples = requested as i32;
-  }
-  let offset = sampler_offset(seed, rows);
-  let stride = sampler_stride(seed, rows);
+  unsafe { choose_rows(rows as i64, samples as i64, seed as u64, table, slots, chosen); }
+  let sample: *const i64 = chosen as *const i64;
 
   // The first restart always gives the best centroids so far.
-  let first = unsafe { run_restart(data, rows, dims, k, samples, 0, batch_size,
-    iterations, metric, spherical, offset, stride, current, sums, counts) };
+  let first = unsafe { run_restart(data, rows, dims, k, samples, sample, 0,
+    iterations, metric, spherical, current, sums, counts) };
   if first.status != 0 {
     return first.status;
   }
   unsafe { copy_vector(output, current as *const f32, size); }
   let mut best_objective = first.objective;
   for restart in 1..restarts {
-    let result: RestartResult = unsafe { run_restart(data, rows, dims, k, samples, restart, batch_size,
-      iterations, metric, spherical, offset, stride, current, sums, counts) };
+    let result: RestartResult = unsafe { run_restart(data, rows, dims, k, samples, sample,
+      restart, iterations, metric, spherical, current, sums, counts) };
     if result.status != 0 {
       return result.status;
     }
@@ -458,23 +574,38 @@ requires !overlaps(output, current, (k as i64) * (dims as i64))
   return 0;
 }
 
+// The number of sampled rows for k centroids: k * sampling_factor, at most rows.
+fn sample_count(rows: i32, k: i32, sampling_factor: i32) -> i32
+requires rows > 0 && k > 0 && sampling_factor > 0
+ensures return > 0 && return <= rows
+{
+  let requested = i64::from(k) * i64::from(sampling_factor);
+  if requested < i64::from(rows) {
+    return requested as i32;
+  }
+  return rows;
+}
+
 // metric: 0=l2, 1=inner product, 2=cosine. root_count=0 means flat clustering.
 // nodes contains the zero root, optional root centroids, then leaf centroids.
 // Returns 1 for invalid arguments or float32 centroid-sum overflow.
 // This is the C boundary. Its unsafe calls trust the capacities and the
 // disjoint buffers that include/vxvector_kmeans.h requires of the caller.
-pub fn vxvector_kmeans_v1(points: *const f32, rows: i32, dims: i32,
-root_count: i32, leaf_count: i32,
-sampling_factor: i32, batch_size: i32,
+pub fn vxvector_kmeans_v2(points: *const f32, rows: i32, dims: i32,
+root_count: i32, leaf_count: i32, sampling_factor: i32,
 iterations: i32, restarts: i32, metric: i32,
 spherical: i32, seed: i32,
 nodes: *mut f32, parents: *mut i32,
 assignments: *mut i32, current: *mut f32,
-sums: *mut f32, counts: *mut i32) -> i32 {
+sums: *mut f32, counts: *mut i32,
+sample_rows: *mut i64, sample_table: *mut i64) -> i32 {
   if points == null<f32>() || nodes == null_mut<f32>() ||
   parents == null_mut<i32>() || assignments == null_mut<i32>() ||
   current == null_mut<f32>() || sums == null_mut<f32>() ||
   counts == null_mut<i32>() {
+    return 1;
+  }
+  if sample_rows == null_mut<i64>() || sample_table == null_mut<i64>() {
     return 1;
   }
   // Pointer comparisons stay out of this condition, so the prover keeps
@@ -483,7 +614,7 @@ sums: *mut f32, counts: *mut i32) -> i32 {
   rows <= 0 || leaf_count > rows ||
   root_count < 0 || root_count > leaf_count ||
   i64::from(root_count) + i64::from(leaf_count) >= 2147483647 ||
-  sampling_factor <= 0 || batch_size <= 0 || iterations <= 0 ||
+  sampling_factor <= 0 || iterations <= 0 ||
   restarts <= 0 || metric < 0 || metric > 2 || seed < 0 {
     return 1;
   }
@@ -517,9 +648,11 @@ sums: *mut f32, counts: *mut i32) -> i32 {
   let width = i64::from(dims);
   let roots = offset_mut(nodes, width);
   let leaves = offset_mut(nodes, i64::from(1 + root_count) * width);
-  let leaf_status = unsafe { train(points, rows, dims, leaf_count, sampling_factor, batch_size,
+  let leaf_samples = sample_count(rows, leaf_count, sampling_factor);
+  let leaf_slots = table_slots(leaf_samples as i64);
+  let leaf_status = unsafe { train(points, rows, dims, leaf_count, leaf_samples,
     iterations, restarts, &distance_metric, is_spherical, seed, leaves,
-    current, sums, counts) };
+    current, sums, counts, sample_rows, sample_table, leaf_slots) };
   if leaf_status != 0 {
     return leaf_status;
   }
@@ -534,9 +667,14 @@ sums: *mut f32, counts: *mut i32) -> i32 {
     return 0;
   }
 
+  // Root training samples at most leaf_count <= leaf_samples rows, so the
+  // sampler scratch for the leaves is large enough.
+  let root_samples = sample_count(leaf_count, root_count, sampling_factor);
+  let root_slots = table_slots(root_samples as i64);
   let root_status = unsafe { train(leaves as *const f32, leaf_count, dims, root_count,
-    sampling_factor, batch_size, iterations, restarts, &distance_metric, is_spherical,
-    (seed % 2147483646) + 1, roots, current, sums, counts) };
+    root_samples, iterations, restarts, &distance_metric, is_spherical,
+    (seed % 2147483646) + 1, roots, current, sums, counts,
+    sample_rows, sample_table, root_slots) };
   if root_status != 0 {
     return root_status;
   }
@@ -550,4 +688,463 @@ sums: *mut f32, counts: *mut i32) -> i32 {
     unsafe { leaf_parents[leaf] = leaf_parents[leaf] + 1; }
   }
   return 0;
+}
+
+// ---------------------------------------------------------------------------
+// The streaming data path. src/data_path.c allocates its buffers, supplies
+// the clock, and turns each outcome below into a status code and a message.
+
+// These structures mirror include/vxvector_data_path.h.
+struct CpuOptions {
+  row_count: u64,
+  memory_budget_bytes: u64,
+  dims: i32,
+  root_count: i32,
+  leaf_count: i32,
+  sampling_factor: i32,
+  batch_size: i32,
+  iterations: i32,
+  restarts: i32,
+  metric: i32,
+  spherical: i32,
+  seed: i32,
+}
+
+struct CpuPlan {
+  sample_count: u64,
+  batch_rows: u64,
+  node_count: u64,
+  hash_slots: u64,
+  buffer_bytes: u64,
+}
+
+struct InputRow {
+  values: *const f32,
+  dims: u32,
+  kind: i32,
+}
+
+// This mirrors struct vxvector_cpu_buffers in src/data_path.c.
+struct CpuBuffers {
+  sample: *mut f32,
+  sample_rows: *mut i64,
+  nodes: *mut f32,
+  parents: *mut i32,
+  assignments: *mut i32,
+  batch: *mut f32,
+  current: *mut f32,
+  sums: *mut f32,
+  counts: *mut i32,
+  positions: *mut i64,
+  table: *mut i64,
+  timings: *mut f64,
+}
+
+// The outcomes of the data path. src/data_path.c keeps the same list.
+const DATA_OK: i32 = 0;
+const DATA_INVALID_OPTION: i32 = 1;
+const DATA_SAMPLE_OVERFLOW: i32 = 2;
+const DATA_BUFFER_OVERFLOW: i32 = 3;
+const DATA_BUDGET: i32 = 4;
+const DATA_SOURCE_SHORT: i32 = 5;
+const DATA_SOURCE_LONG: i32 = 6;
+const DATA_SOURCE_FAILED: i32 = 7;
+const DATA_INVALID_ROW: i32 = 8;
+const DATA_NONFINITE_ROW: i32 = 9;
+const DATA_KMEANS_REJECTED: i32 = 10;
+const DATA_NONFINITE_CENTROID: i32 = 11;
+
+// The largest allocation that size_t and ptrdiff_t both hold on the 64-bit
+// targets, and the total that marks a size beyond it.
+const ALLOCATION_LIMIT: u64 = 9223372036854775807u64;
+const TOO_LARGE: u64 = 18446744073709551615u64;
+
+// total plus count elements of width bytes, or TOO_LARGE when the sum would
+// exceed ALLOCATION_LIMIT. This is tested, not proved: the prover ignores `/`
+// and cannot use these u64 constants. tests/test_data_path.py covers both
+// overflow results.
+fn add_buffer(total: u64, count: u64, width: u64) -> u64
+requires width > 0
+{
+  if count > ALLOCATION_LIMIT / width {
+    return TOO_LARGE;
+  }
+  if total > ALLOCATION_LIMIT - count * width {
+    return TOO_LARGE;
+  }
+  return total + count * width;
+}
+
+// Whether the options describe a request that the data path can run.
+fn valid_options(o: &CpuOptions) -> bool {
+  if o.row_count == 0 || o.row_count > ALLOCATION_LIMIT {
+    return false;
+  }
+  if o.dims <= 0 || o.root_count < 0 || o.leaf_count <= 0 || o.root_count > o.leaf_count {
+    return false;
+  }
+  if o.leaf_count as u64 > o.row_count {
+    return false;
+  }
+  if i64::from(o.root_count) + i64::from(o.leaf_count) >= 2147483647 {
+    return false;
+  }
+  if o.sampling_factor <= 0 || o.batch_size <= 0 || o.iterations <= 0 || o.restarts <= 0 {
+    return false;
+  }
+  if o.metric < 0 || o.metric > 2 || (o.spherical != 0 && o.spherical != 1) || o.seed < 0 {
+    return false;
+  }
+  return true;
+}
+
+// Checks the options and sizes every heap buffer of the data path, without
+// allocation. plan holds zeros unless the sizes are known. After a budget
+// failure it holds the sizes.
+pub fn vxvector_plan_cpu_reason_v1(options: *const CpuOptions, plan: *mut CpuPlan) -> i32 {
+  if plan == null_mut<CpuPlan>() {
+    return DATA_INVALID_OPTION;
+  }
+  let zero: u64 = 0;
+  unsafe {
+    plan[0] = CpuPlan { sample_count: zero, batch_rows: zero, node_count: zero,
+      hash_slots: zero, buffer_bytes: zero };
+  }
+  if options == null<CpuOptions>() {
+    return DATA_INVALID_OPTION;
+  }
+  let o: CpuOptions = unsafe { options[0] };
+  if !valid_options(&o) {
+    return DATA_INVALID_OPTION;
+  }
+  let requested = (o.leaf_count as u64) * (o.sampling_factor as u64);
+  let mut samples = o.row_count;
+  if requested < o.row_count {
+    samples = requested;
+  }
+  if samples > 2147483647u64 {
+    return DATA_SAMPLE_OVERFLOW;
+  }
+  let sample_rows = samples as i64;
+  if sample_rows <= 0i64 {
+    return DATA_INVALID_OPTION;
+  }
+  let mut batch_rows = o.row_count;
+  if (o.batch_size as u64) < o.row_count {
+    batch_rows = o.batch_size as u64;
+  }
+  let one: u64 = 1;
+  let node_count = one + (o.root_count as u64) + (o.leaf_count as u64);
+  let slots = table_slots(sample_rows) as u64;
+  let dims = o.dims as u64;
+  let leaves = o.leaf_count as u64;
+  let mut bytes: u64 = 0;
+  bytes = add_buffer(bytes, samples * dims, 4u64);
+  bytes = add_buffer(bytes, batch_rows * dims, 4u64);
+  bytes = add_buffer(bytes, node_count * dims, 4u64);
+  bytes = add_buffer(bytes, node_count, 4u64);
+  bytes = add_buffer(bytes, samples, 4u64);
+  bytes = add_buffer(bytes, leaves * dims, 4u64);
+  bytes = add_buffer(bytes, leaves * dims, 4u64);
+  bytes = add_buffer(bytes, leaves, 4u64);
+  bytes = add_buffer(bytes, samples, 8u64);
+  bytes = add_buffer(bytes, samples, 16u64);
+  bytes = add_buffer(bytes, slots, 8u64);
+  if bytes == TOO_LARGE {
+    return DATA_BUFFER_OVERFLOW;
+  }
+  unsafe {
+    plan[0] = CpuPlan { sample_count: samples, batch_rows: batch_rows, node_count: node_count,
+      hash_slots: slots, buffer_bytes: bytes };
+  }
+  if bytes > o.memory_budget_bytes {
+    return DATA_BUDGET;
+  }
+  return DATA_OK;
+}
+
+// Pairs each sampled row with its place in the sample: positions holds
+// (row, destination) for destination 0..count.
+unsafe fn pair_positions(chosen: *const i64, count: i64, positions: *mut i64) -> void
+requires count > 0 && count <= 2147483647
+requires valid(chosen, count)
+requires initialized(chosen, count)
+requires valid(positions, 2i64 * count)
+ensures initialized(positions, 2i64 * count)
+ensures !frees(positions)
+{
+  for i in 0i64..count invariant initialized(positions, 2i64 * i) {
+    unsafe { positions[2i64 * i] = chosen[i]; }
+    unsafe { positions[2i64 * i + 1i64] = i; }
+  }
+}
+
+// Swaps pairs a and b of positions.
+unsafe fn swap_pairs(positions: *mut i64, count: i64, a: i64, b: i64) -> void
+requires count > 0 && a >= 0 && a < count && b >= 0 && b < count
+requires valid(positions, 2i64 * count)
+requires initialized(positions, 2i64 * count)
+ensures !frees(positions)
+{
+  let row: i64 = unsafe { positions[2i64 * a] };
+  let destination: i64 = unsafe { positions[2i64 * a + 1i64] };
+  unsafe { positions[2i64 * a] = positions[2i64 * b]; }
+  unsafe { positions[2i64 * a + 1i64] = positions[2i64 * b + 1i64]; }
+  unsafe { positions[2i64 * b] = row; }
+  unsafe { positions[2i64 * b + 1i64] = destination; }
+}
+
+// Restores the max-heap order by row below pair root, in the first size pairs.
+unsafe fn sift_down(positions: *mut i64, count: i64, size: i64, start: i64) -> void
+requires count > 0 && size > 0 && size <= count && start >= 0 && start < size
+requires valid(positions, 2i64 * count)
+requires initialized(positions, 2i64 * count)
+ensures !frees(positions)
+{
+  let mut root = start;
+  // child and right are declared outside the loop: Vx drops the facts about
+  // root = child when the scope of child ends.
+  let mut child = start;
+  let mut right = start;
+  while 2i64 * root + 1i64 < size invariant root >= 0 && root < size {
+    child = 2i64 * root + 1i64;
+    right = child + 1i64;
+    if right < size {
+      if unsafe { positions[2i64 * child] } < unsafe { positions[2i64 * right] } {
+        child = right;
+      }
+    }
+    if unsafe { positions[2i64 * root] } >= unsafe { positions[2i64 * child] } {
+      return;
+    }
+    unsafe { swap_pairs(positions, count, root, child); }
+    root = child;
+  }
+}
+
+// Heapsort by row. It needs no memory beyond the budgeted pairs.
+unsafe fn sort_positions(positions: *mut i64, count: i64) -> void
+requires count > 0
+requires valid(positions, 2i64 * count)
+requires initialized(positions, 2i64 * count)
+ensures !frees(positions)
+{
+  // Pairs without children need no sifting. Starting at the last pair
+  // avoids a division, which the prover does not model.
+  let mut start = count;
+  while start > 0i64 invariant start >= 0i64 && start <= count {
+    start = start - 1i64;
+    unsafe { sift_down(positions, count, count, start); }
+  }
+  let mut end = count - 1i64;
+  while end > 0i64 invariant end >= 0i64 && end < count {
+    unsafe { swap_pairs(positions, count, 0i64, end); }
+    unsafe { sift_down(positions, count, end, 0i64); }
+    end = end - 1i64;
+  }
+}
+
+// Reads rows source rows into batch through the C reader, and checks each.
+unsafe fn read_batch(next: fn(*mut u8, *mut InputRow) -> i32, context: *mut u8,
+row: *mut InputRow, batch: *mut f32, rows: i32, dims: i32) -> i32
+requires rows > 0 && dims > 0
+requires valid(row, 1)
+requires valid(batch, (rows as i64) * (dims as i64))
+ensures !frees(batch)
+{
+  let count = i64::from(rows);
+  let width = i64::from(dims);
+  for r in 0i64..count {
+    let status = next(context, row);
+    if status == 0 {
+      return DATA_SOURCE_SHORT;
+    }
+    if status != 1 {
+      return DATA_SOURCE_FAILED;
+    }
+    let input: InputRow = unsafe { row[0] };
+    if input.values == null<f32>() {
+      return DATA_INVALID_ROW;
+    }
+    if input.kind != 0 || i64::from(input.dims) != width {
+      return DATA_INVALID_ROW;
+    }
+    let values: *const f32 = input.values;
+    for d in 0i64..width {
+      // Trusted: the reader promises dims values that stay valid until its
+      // next call.
+      let value: f32 = unsafe { values[d] };
+      if !value.is_finite() {
+        return DATA_NONFINITE_ROW;
+      }
+      let index = buffer_index(r, count, width, d);
+      unsafe { batch[index] = value; }
+    }
+  }
+  return DATA_OK;
+}
+
+// Copies the sampled rows of a batch to their places in sample. The batch
+// holds rows source rows from row base on. positions holds count
+// (row, destination) pairs sorted by row, of which the first first are
+// copied. Returns the number copied after this batch.
+unsafe fn gather(batch: *const f32, base: i64, rows: i32, dims: i32,
+positions: *const i64, count: i64, first: i64, sample: *mut f32) -> i64
+requires rows > 0 && dims > 0 && count > 0 && count <= 2147483647
+requires first >= 0 && first <= count
+requires valid(batch, (rows as i64) * (dims as i64))
+requires initialized(batch, (rows as i64) * (dims as i64))
+requires valid(positions, 2i64 * count)
+requires initialized(positions, 2i64 * count)
+requires valid(sample, count * (dims as i64))
+ensures return >= 0i64 && return <= count
+ensures !frees(sample)
+{
+  let width = i64::from(dims);
+  let height = i64::from(rows);
+  let mut selected = first;
+  while selected < count invariant selected >= 0 && selected <= count {
+    let source: i64 = unsafe { positions[2i64 * selected] } - base;
+    let destination: i64 = unsafe { positions[2i64 * selected + 1i64] };
+    // Earlier batches took every row before base, and select_rows chose
+    // destinations below count. The prover cannot see what memory holds.
+    if source < 0i64 || source >= height || destination < 0i64 || destination >= count {
+      return selected;
+    }
+    for d in 0i64..width {
+      let from = buffer_index(source, height, width, d);
+      let to = buffer_index(destination, count, width, d);
+      unsafe { sample[to] = batch[from]; }
+    }
+    selected = selected + 1i64;
+  }
+  return selected;
+}
+
+// Whether every one of length values is finite.
+unsafe fn all_finite(values: *const f32, length: i64) -> bool
+requires valid(values, length)
+requires initialized(values, length)
+{
+  for i in 0i64..length {
+    let value: f32 = unsafe { values[i] };
+    if !value.is_finite() {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Zero seconds. A float literal in a function with a loop invariant reaches
+// the prover and crashes it, as in positive (vx-lang/Vx#3145). A call keeps
+// it out of the facts.
+fn no_seconds() -> f64 {
+  return 0.0;
+}
+
+// Chooses the sample, reads and checks every source row, collects the sampled
+// rows, and trains on them. options must pass vxvector_plan_cpu_reason_v1,
+// which wrote plan. buffers holds the capacities that plan states. row is
+// storage for the reader. timings receives read, sample and clustering seconds.
+// This is a C boundary. Its unsafe calls trust those capacities.
+pub fn vxvector_run_cpu_reason_v1(options: *const CpuOptions, plan: *const CpuPlan,
+next: fn(*mut u8, *mut InputRow) -> i32, context: *mut u8, row: *mut InputRow,
+clock: fn() -> f64, buffers: *const CpuBuffers) -> i32 {
+  let o: CpuOptions = unsafe { options[0] };
+  let p: CpuPlan = unsafe { plan[0] };
+  let b: CpuBuffers = unsafe { buffers[0] };
+  if !valid_options(&o) {
+    return DATA_INVALID_OPTION;
+  }
+  // The plan states these. The checks give the prover the facts that the
+  // calls below require.
+  let rows: i64 = o.row_count as i64;
+  let count: i64 = p.sample_count as i64;
+  let slots: i64 = p.hash_slots as i64;
+  let batch_rows: i64 = p.batch_rows as i64;
+  let dims: i32 = o.dims;
+  let width: i64 = dims as i64;
+  if count <= 0i64 || count > 2147483647i64 || count > rows || slots <= count {
+    return DATA_INVALID_OPTION;
+  }
+  if batch_rows <= 0i64 || batch_rows > 2147483647i64 || dims <= 0 {
+    return DATA_INVALID_OPTION;
+  }
+
+  // Each buffer is a local. A contract can name a local argument, but not a
+  // field of b.
+  let sample: *mut f32 = b.sample;
+  let batch: *mut f32 = b.batch;
+  let positions: *mut i64 = b.positions;
+  let mut start = clock();
+  unsafe { choose_rows(rows, count, o.seed as u64, b.table, slots, b.sample_rows); }
+  unsafe { pair_positions(b.sample_rows as *const i64, count, b.positions); }
+  unsafe { sort_positions(b.positions, count); }
+  let mut sample_seconds = clock() - start;
+  let mut read_seconds: f64 = no_seconds();
+
+  let mut selected = 0i64;
+  let mut base = 0i64;
+  // height is declared outside the loop for the same reason as child in
+  // sift_down.
+  let mut height: i64 = batch_rows;
+  while base < rows
+  invariant base >= 0i64
+  invariant selected >= 0i64 && selected <= count {
+    height = batch_rows;
+    if rows - base < height {
+      height = rows - base;
+    }
+    start = clock();
+    let status = unsafe { read_batch(next, context, row, b.batch, height as i32, dims) };
+    read_seconds += clock() - start;
+    if status != DATA_OK {
+      return status;
+    }
+    start = clock();
+    selected = unsafe { gather(batch as *const f32, base, height as i32, dims,
+      positions as *const i64, count, selected, sample) };
+    // gather ensures this, but Vx drops the ensures of a call whose arguments
+    // it cannot model, such as a pointer cast, when the result is assigned
+    // rather than bound by `let` (vx-lang/Vx#3040). A `let` inside the loop
+    // would not help: its facts end with its scope.
+    if selected < 0i64 || selected > count {
+      return DATA_INVALID_OPTION;
+    }
+    sample_seconds += clock() - start;
+    base = base + height;
+  }
+  start = clock();
+  let extra = next(context, row);
+  read_seconds += clock() - start;
+  if extra == 1 {
+    return DATA_SOURCE_LONG;
+  }
+  if extra != 0 {
+    return DATA_SOURCE_FAILED;
+  }
+  if selected != count {
+    return DATA_INVALID_OPTION;
+  }
+
+  // The data path samples already, so the kernel takes every collected row in
+  // order. The pairs and the table are free again and serve as its scratch.
+  start = clock();
+  let status = vxvector_kmeans_v2(b.sample as *const f32, count as i32, o.dims,
+    o.root_count, o.leaf_count, o.sampling_factor, o.iterations, o.restarts,
+    o.metric, o.spherical, o.seed, b.nodes, b.parents, b.assignments,
+    b.current, b.sums, b.counts, b.positions, b.table);
+  let clustering_seconds = clock() - start;
+  let timings: *mut f64 = b.timings;
+  unsafe { timings[0] = read_seconds; }
+  unsafe { timings[1] = sample_seconds; }
+  unsafe { timings[2] = clustering_seconds; }
+  if status != 0 {
+    return DATA_KMEANS_REJECTED;
+  }
+  let node_values = (p.node_count as i64) * width;
+  if !unsafe { all_finite(b.nodes as *const f32, node_values) } {
+    return DATA_NONFINITE_CENTROID;
+  }
+  return DATA_OK;
 }

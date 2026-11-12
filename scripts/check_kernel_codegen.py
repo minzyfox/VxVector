@@ -20,7 +20,11 @@ def check_copy(llvm):
         raise AssertionError('Copy load/store alias contracts are missing from LLVM')
 
 
-# The only trusted clauses outside the C boundary: two copies from data into
+# The functions that C calls. Their unsafe calls trust the capacities that the
+# headers require of the caller.
+BOUNDARIES = {'vxvector_kmeans_v2', 'vxvector_plan_cpu_reason_v1', 'vxvector_run_cpu_reason_v1'}
+
+# The only trusted clauses outside the C boundaries: two copies from data into
 # current. Vx's !overlaps takes one length for both buffers, so it cannot state
 # that two buffers of different lengths are disjoint.
 KNOWN_TRUSTED = {('run_restart', '!overlaps(destination, source, length)'): 2}
@@ -47,9 +51,9 @@ def trusted_clauses(compiler, vx_root, path):
 def check_audit(compiler, vx_root, path):
     """Raise unless each trusted clause is at the C boundary or in KNOWN_TRUSTED."""
     counts = trusted_clauses(compiler, vx_root, path)
-    inside = {key: n for key, n in counts.items() if key[0] != 'vxvector_kmeans_v1'}
+    inside = {key: n for key, n in counts.items() if key[0] not in BOUNDARIES}
     if inside != KNOWN_TRUSTED:
-        raise AssertionError(f'Trusted clauses outside the C boundary: {inside}')
+        raise AssertionError(f'Trusted clauses outside the C boundaries: {inside}')
 
 
 def main():
@@ -73,6 +77,16 @@ def main():
         ('nearest_caller', source.replace('ensures return >= 0 && return < k\n', ''), 'E8006'),
         ('buffer_offset', source.replace('return row * dims + d;',
                                         'return rows * dims;'), 'E8001'),
+        # A row index read from the sampler's memory must stay below rows.
+        ('sample_row_bound', source.replace('    return 0i64;\n  }\n  return row;\n}',
+                                            '    return 0i64;\n  }\n  return row + 1i64;\n}'), 'E8001'),
+        ('first_slot_bound', source.replace('    return 0;\n  }\n  return slot;\n}',
+                                            '    return 0;\n  }\n  return slot + 1;\n}'), 'E8001'),
+        # The sampler table needs more slots than rows to choose.
+        ('table_too_small', source.replace('while slots < 2i64 * count invariant',
+                                           'while slots < count invariant'), 'E8001'),
+        ('gather_destination', source.replace('destination < 0i64 || destination >= count {',
+                                              'destination < 0i64 {'), 'E8006'),
     ]
     with tempfile.TemporaryDirectory() as temporary:
         # Pointer clauses inside the kernel are proved, not trusted. A read one

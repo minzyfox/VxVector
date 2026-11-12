@@ -8,13 +8,14 @@ import ctypes
 import hashlib
 import itertools
 import json
-import math
 import platform
 import sys
 from pathlib import Path
 
 import faiss
 import numpy as np
+
+from sampler_reference import table_slots, training_rows
 
 
 PROJECT = Path(__file__).resolve().parents[1]
@@ -38,11 +39,7 @@ def distances(points, centers, metric):
 
 
 def sample_indices(rows, k, factor, seed):
-    count = min(rows, k * factor)
-    stride = 1 if rows == 1 else 1 + seed * 48271 % (rows - 1)
-    while math.gcd(stride, rows) != 1:
-        stride = 1 if stride + 1 >= rows else stride + 1
-    return (seed % rows + np.arange(count) * stride) % rows
+    return np.array(training_rows(rows, k, factor, seed), dtype='int64')
 
 
 def normalize(centers):
@@ -106,14 +103,15 @@ def lloyd_reference(points, k, factor, iterations, restarts, metric, spherical, 
 
 
 def native_function(library):
-    function = library.vxvector_kmeans_v1
+    function = library.vxvector_kmeans_v2
     fp, ip = ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_int32)
-    function.argtypes = [fp] + [ctypes.c_int32] * 11 + [fp, ip, ip, fp, fp, ip]
+    lp = ctypes.POINTER(ctypes.c_int64)
+    function.argtypes = [fp] + [ctypes.c_int32] * 10 + [fp, ip, ip, fp, fp, ip, lp, lp]
     function.restype = ctypes.c_int32
     return function
 
 
-def native(function, points, roots, leaves, factor, batch, iterations,
+def native(function, points, roots, leaves, factor, iterations,
            restarts, metric, spherical, seed):
     rows, dims = points.shape
     nodes = np.zeros((1 + roots + leaves, dims), dtype='float32')
@@ -121,12 +119,17 @@ def native(function, points, roots, leaves, factor, batch, iterations,
     labels = np.zeros(rows, dtype='int32')
     current, sums = (np.zeros((leaves, dims), dtype='float32') for _ in range(2))
     counts = np.zeros(leaves, dtype='int32')
+    samples = min(rows, leaves * factor)
+    sample_rows = np.zeros(samples, dtype='int64')
+    sample_table = np.zeros(table_slots(samples), dtype='int64')
     fp, ip = ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_int32)
+    lp = ctypes.POINTER(ctypes.c_int64)
     status = function(points.ctypes.data_as(fp), rows, dims, roots, leaves,
-                      factor, batch, iterations, restarts, metric, int(spherical), seed,
+                      factor, iterations, restarts, metric, int(spherical), seed,
                       nodes.ctypes.data_as(fp), parents.ctypes.data_as(ip),
                       labels.ctypes.data_as(ip), current.ctypes.data_as(fp),
-                      sums.ctypes.data_as(fp), counts.ctypes.data_as(ip))
+                      sums.ctypes.data_as(fp), counts.ctypes.data_as(ip),
+                      sample_rows.ctypes.data_as(lp), sample_table.ctypes.data_as(lp))
     if status != 0:
         raise AssertionError(f'Native call returned {status}')
     return nodes, parents, labels
@@ -187,8 +190,7 @@ def main():
             points = normalize(points)
         factor = 8 if seed == 0 else 32
         iterations, restarts = (1, 1) if seed == 0 else (8, 3)
-        batch = 1 if seed == 0 else 13
-        nodes, parents, labels = native(function, points, roots, 4, factor, batch,
+        nodes, parents, labels = native(function, points, roots, 4, factor,
                                         iterations, restarts, metric, spherical, seed)
         expected, sample = reference(points, 4, factor, iterations, restarts, metric, spherical, seed)
         check_structure(points, nodes, parents, labels, roots, 4, metric, spherical)
@@ -203,13 +205,13 @@ def main():
         expected_objective = float(distances(sample, expected, metric).min(axis=1).sum())
         np.testing.assert_allclose(actual_objective, expected_objective, atol=ATOL, rtol=RTOL,
                                    err_msg='Independent sample objectives differ')
-        repeated = native(function, points, roots, 4, factor, 1000, iterations,
+        repeated = native(function, points, roots, 4, factor, iterations,
                           restarts, metric, spherical, seed)
         for actual, repeat in zip((nodes, parents, labels), repeated):
-            np.testing.assert_array_equal(actual, repeat, err_msg='Batch size changed the result')
+            np.testing.assert_array_equal(actual, repeat, err_msg='A repeated call changed the result')
         print(json.dumps(dict(dims=dims, metric=metric, seed=seed, roots=roots,
                               samples=len(sample), factor=factor, iterations=iterations,
-                              restarts=restarts, batch=batch, objective=actual_objective,
+                              restarts=restarts, objective=actual_objective,
                               reference_objective=expected_objective,
                               sample_sha256=hashlib.sha256(sample.tobytes()).hexdigest())), flush=True)
         cases += 1
@@ -220,8 +222,7 @@ def main():
         points *= np.geomspace(0.1, 10, len(points))[:, None]
         points = points.astype('float32')
         seed = 17
-        batch = (1, 7, 100)[independent_cases % 3]
-        nodes, parents, labels = native(function, points, 0, 4, factor, batch,
+        nodes, parents, labels = native(function, points, 0, 4, factor,
                                         iterations, restarts, metric, spherical, seed)
         expected, sample = lloyd_reference(points, 4, factor, iterations, restarts,
                                             metric, spherical, seed)
@@ -232,14 +233,14 @@ def main():
         np.testing.assert_allclose(actual_objective, expected_objective, atol=ATOL, rtol=RTOL)
         print(json.dumps(dict(reference='independent-float64-lloyd', dims=dims, metric=metric,
                               spherical=spherical, iterations=iterations, restarts=restarts,
-                              factor=factor, batch=batch, seed=seed, objective=actual_objective,
+                              factor=factor, seed=seed, objective=actual_objective,
                               reference_objective=expected_objective)), flush=True)
         independent_cases += 1
     # Explicitly separate policies which cannot be equated with Faiss splitting.
     for metric in range(3):
         for points in (np.zeros((8, 128), dtype='float32'),
                        np.tile(np.array([[3., 4.] + [0.] * 126], dtype='float32'), (8, 1))):
-            nodes, parents, labels = native(function, points, 2, 4, 8, 3, 8, 2, metric, True, 42)
+            nodes, parents, labels = native(function, points, 2, 4, 8, 8, 2, metric, True, 42)
             check_structure(points, nodes, parents, labels, 2, 4, metric, True)
             expected = normalize(points[:1])[0]
             np.testing.assert_allclose(nodes[1:], np.tile(expected, (6, 1)), atol=ATOL, rtol=RTOL)

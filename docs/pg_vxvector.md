@@ -17,16 +17,18 @@ CPU SIMD optimization is no longer a prerequisite for GPU execution.
 Full kernel proofs and hosted CI remain useful work, but do not block a GPU experiment independently of relevant correctness failures.
 Compiler and runtime improvements should follow concrete application failures with focused regression tests.
 
-Application logic belongs in Vx. C remains only for PostgreSQL internals, process and pipe handling, and the specific operations Vx cannot yet express.
-Each such operation needs a recorded Vx gap rather than a silent C fallback.
+Application logic belongs in Vx. C remains only for PostgreSQL internals, process and pipe handling, the specific operations Vx cannot yet express, and deliberate exceptions such as allocation that tests must intercept.
+Each Vx gap needs a recorded issue, and each exception a recorded reason, rather than a silent C fallback.
 
 ## Current state and evidence limits
 
-The project pins Vx `7e3cf6a3` (main, November 9) in [vx-revision.txt](../vx-revision.txt).
-The [Step 1 record](step1_cpu_baseline_2026-11-09.md) validates the current kernel with that compiler on native macOS arm64.
+The project pins Vx `df51035d` (main, November 11) in [vx-revision.txt](../vx-revision.txt).
+The [Step 2 record](step2_data_path_vx_2026-11-11.md) validates the current kernel and data path with that compiler on native macOS arm64.
 
 The CPU core, bounded sampling adapter, separate worker, and PostgreSQL/VectorChord integration are implemented.
+The adapter's logic is in Vx since Step 2. Its kernel ABI is `vxvector_kmeans_v2`.
 The installed Linux worker and saved Linux build manifests still identify Vx `c9612a1f` and an earlier kernel source hash.
+The extension build now links the Vx object and has not been run since that change.
 PostgreSQL, recall, and objective results remain evidence for their recorded source and compiler revisions.
 No GPU execution has been performed.
 
@@ -77,21 +79,27 @@ The kernel has a second sampler, the stride permutation in `train`, so two code 
 Convert this layer to Vx before GPU work so that one sampling policy feeds both backends and every GPU comparison.
 This is items D1 and D2 of the [November 8 usage review](vx_usage_review_2026-11-08.md), extended to the whole file.
 
-- [ ] Convert `vxvector_plan_cpu_v1` to Vx: option validation, overflow-checked buffer sizing, and the memory-budget check.
-- [ ] Convert the sampler to Vx: SplitMix64, Floyd's selection with its hash table, and the position sort.
-- [ ] Remove the stride permutation from `train`, so that the converted sampler is the only one.
-- [ ] Convert row validation (null rows, type, dimensions, non-finite values), batch copying, and the final centroid finiteness check.
-- [ ] Prove that sampled row indices are less than `rows` and that buffer sizes do not overflow. Add a mutation that fails each proof.
-- [ ] Remove `batch_size` from the kernel ABI. Keep it in the row reader. Bump the ABI version if the kernel signature changes.
-- [ ] Keep the `vxvector_plan_cpu_v1`, `vxvector_run_cpu_v1`, and `vxvector_free_cpu_result_v1` entry points, error codes, and messages, so that `worker.c` and `bridge.c` stay unchanged.
-- [ ] Keep in C only what Vx cannot express, such as calling the C row-reader callback or allocation if needed. File or update a Vx issue for each and link it from the remaining C code.
-- [ ] Rerun the Step 1 checks and the data-path tests, including allocation failure and sanitizers, and record new hashes.
-  Sample selection may change. Update expected outputs only with an explanation of each change.
+Native work complete November 11, 2026, for Vx `df51035d` on macOS arm64. See the [Step 2 record](step2_data_path_vx_2026-11-11.md).
+
+- [x] Convert `vxvector_plan_cpu_v1` to Vx: option validation, overflow-checked buffer sizing, and the memory-budget check.
+- [x] Convert the sampler to Vx: SplitMix64, Floyd's selection with its hash table, and the position sort.
+- [x] Remove the stride permutation from `train`, so that the converted sampler is the only one.
+- [x] Convert row validation (null rows, type, dimensions, non-finite values), batch copying, and the final centroid finiteness check.
+- [x] Prove that sampled row indices are less than `rows`. Add a mutation that fails each proof.
+- [ ] Prove that buffer sizes do not overflow. Tested, not proved: the prover ignores `/` and cannot use the `u64` constants.
+- [x] Remove `batch_size` from the kernel ABI. Keep it in the row reader. Bump the ABI version if the kernel signature changes.
+- [x] Keep the `vxvector_plan_cpu_v1`, `vxvector_run_cpu_v1`, and `vxvector_free_cpu_result_v1` entry points, error codes, and messages, so that `worker.c` and `bridge.c` stay unchanged.
+- [x] Keep in C only what Vx cannot express, or record why not. Allocation, the clock, and the message text stay in C by choice, for the reasons in the record. The row-reader callback works from Vx.
+- [x] Rerun the Step 1 checks and the data-path tests, including allocation failure and sanitizers, and record new hashes.
+  Sample rows and plans match the C implementation exactly. Centroids change, as the record explains.
+- [ ] Build the Linux worker and the extension, which now links the Vx object, and rerun the PostgreSQL suite and recall.
+- [x] Check the Vx finding that an assigned call result loses its `ensures`. It is [vx-lang/Vx#3040](https://github.com/vx-lang/Vx/issues/3040), already open.
 
 Out of scope: [pg_vxvector/src/bridge.c](../pg_vxvector/src/bridge.c) and the Rust wrapper, which depend on PostgreSQL internals, and the process and pipe code in [src/worker.c](../src/worker.c).
 
-Exit: `src/data_path.c` contains only Vx gaps that have recorded issues. The array API and the streaming adapter choose the same sample for the same seed and rows.
+Exit: `src/data_path.c` contains only Vx gaps that have recorded issues, or exceptions with recorded reasons. The array API and the streaming adapter choose the same sample for the same seed and rows.
 PostgreSQL and recall revalidation still waits for packaging of the refreshed worker, as in Step 1.
+The Linux build needs a check before then, because the extension build changed.
 
 ## Step 3: execute standalone L2 clustering on Apple Metal
 
@@ -176,6 +184,7 @@ Exit: reproducible end-to-end measurements support each performance claim, inclu
 - [CPU PostgreSQL integration record](milestone_3_cpu_integration.md).
 - [Naming and rename-validation record](rename_vxvector.md).
 - [Step 1 CPU baseline record](step1_cpu_baseline_2026-11-09.md).
+- [Step 2 data path record](step2_data_path_vx_2026-11-11.md).
 - [November 8 Vx usage review](vx_usage_review_2026-11-08.md) and [Vx issue drafts](vx_issue_drafts_2026-11-08.md).
 
 These references supply procedures and evidence. They do not add prerequisites or override this sequence.

@@ -55,9 +55,8 @@ If you already have both checkouts, set `VX_ROOT` to a checkout at the exact
 commit in [vx-revision.txt](vx-revision.txt). Use a separate checkout if your
 existing Vx tree contains work you want to keep.
 
-The current pin is `7e3cf6a3167fb23e0d49643bae68c385909c587e`, a commit on Vx `main`.
-It includes [vx-lang/Vx#2852](https://github.com/vx-lang/Vx/pull/2852).
-[The Step 1 record](docs/step1_cpu_baseline_2026-11-09.md) validates the native build at this pin.
+The current pin is `df51035df9cd0c7f2477a803f7e6ea985cd9cf71`, a commit on Vx `main`.
+[The Step 2 record](docs/step2_data_path_vx_2026-11-11.md) validates the native build at this pin.
 The Linux worker and PostgreSQL image have not been rebuilt at this pin yet.
 The scripts default to `../../Vx` when `VX_ROOT` is unset. The fresh-checkout
 example overrides that default with its adjacent `../Vx` directory.
@@ -278,7 +277,7 @@ The returned `index` field is `null`. The call creates only the centroid table.
 | `distance_operator` | `l2`, `ip`, or `cos`; query with `<->`, `<#>`, or `<=>`, respectively. |
 | `spherical_centroids` | Normalize centroids; useful for directional comparisons. |
 | `sampling_factor` | Maximum sampled vectors per leaf. |
-| `batch_size` | Worker read and computation batch size. |
+| `batch_size` | Rows the worker reads per batch. It does not change the result. |
 | `kmeans_iterations`, `kmeans_nredo` | Training iterations and restarts. |
 | `seed` | Repeatable sampling and initialization for a fixed source order. |
 | `memory_budget_bytes` | Explicit buffer budget; default 256 MiB. It does not cap total PostgreSQL/worker memory use. |
@@ -349,7 +348,7 @@ name, set `VXVECTOR_POSTGRES_CONTAINER` to its PostgreSQL container name.
 
 This step builds a library for your host operating system, separate from the Linux
 worker inside Docker. Install a C/Clang compiler, Rust, LLVM/MLIR 22, and Z3 using
-the [pinned Vx build instructions](https://github.com/vx-lang/Vx/tree/7e3cf6a3167fb23e0d49643bae68c385909c587e#quickstart).
+the [pinned Vx build instructions](https://github.com/vx-lang/Vx/tree/df51035df9cd0c7f2477a803f7e6ea985cd9cf71#quickstart).
 Use LLVM major version 22 even if a newer version is installed.
 
 Set `VX_ROOT` to your pinned Vx checkout. It is already set if you followed the
@@ -498,19 +497,22 @@ leaves first, then roots from those leaves, and assigns each leaf to its nearest
 root. This forms the centroid tree VectorChord accepts.
 
 The distance codes are squared L2, negative inner product, and cosine distance.
-The function samples up to `leaf_count * sampling_factor` distinct rows using a
-seeded permutation. It processes sampled rows in batches. Each restart begins
-from different sampled rows, and the lowest sample objective wins. Empty
+The function samples up to `leaf_count * sampling_factor` distinct rows. When that
+is every row, it uses them in order. Otherwise SplitMix64 and Floyd's algorithm
+choose them from the seed. Each restart begins from different sampled rows, and
+the lowest sample objective wins. Empty
 clusters use a sampled row as their replacement. Zero-length vectors stay zero
 when spherical centroids are enabled.
 
-The original array API requires resident input. The CPU host adapter in
+The array API (`vxvector_kmeans_v2`) requires resident input. The CPU host adapter in
 [`include/vxvector_data_path.h`](include/vxvector_data_path.h) accepts a streaming row
 reader instead. It validates all rows, collects a repeatable bounded sample,
-checks a buffer memory budget before allocation, and calls the same Vx library.
-It reports read/validation, sampling, and clustering timings. Its sampler uses
-Floyd's algorithm with SplitMix64 rather than the array API's permutation.
-Compare the adapter against direct Vx calls on its collected sample.
+checks a buffer memory budget before allocation, and trains with the same kernel.
+It reports read/validation, sampling, and clustering timings. Both APIs use one
+sampler, so they train on the same rows and produce the same centroids for the
+same seed. The adapter's logic is in Vx, in `src/kmeans.vx`. Its C side,
+`src/data_path.c`, allocates the buffers, supplies the clock, and writes the
+error messages.
 
 The reader must provide a stable row order and count/scan snapshot. The adapter
 checks the declared row count but cannot enforce a database snapshot itself.
