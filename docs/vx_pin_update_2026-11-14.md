@@ -3,7 +3,7 @@
 This record moves the Vx pin from `df51035d` to `423a10db`, 66 commits later on Vx `main`.
 It revalidates the native macOS checks of the [Step 2 record](step2_data_path_vx_2026-11-11.md).
 No VxVector code changed. One comment in `src/kmeans.vx` now names the new revision.
-Standalone macOS checks only. The Linux worker, the extension, PostgreSQL, and recall were not rerun.
+It also rebuilds the Linux worker and the extension and reruns PostgreSQL and recall. See [Linux and PostgreSQL](#linux-and-postgresql).
 
 ## Revisions
 
@@ -60,7 +60,48 @@ The reproductions are in [pin_update_repros_2026-11-14](evidence/pin_update_repr
 - Run the Vx build under `arch -arm64` when the shell runs under Rosetta. Otherwise `xcrun` cannot load and `vxc` fails to link.
 - `cargo build` of the whole Vx workspace also failed to link `cargo-vx-bench` under Rosetta. `cargo build --bin vxc` is enough for VxVector.
 
+## Linux and PostgreSQL
+
+This section closes the Linux item that Step 2 left open.
+The Linux worker, the extension, and the PostgreSQL image were rebuilt at `423a10db` and checked.
+Docker Desktop 28.5.1 ran the `linux/amd64` containers under emulation on macOS arm64.
+The [Linux metadata file](evidence/linux_metadata_2026-11-14.json) lists every hash.
+
+| Item | Value |
+| --- | --- |
+| Linux `kmeans.o` SHA-256 | `67fdbd582304d3b8fea869431a862b94f605c03b3b3bec22b401b717ab66e3f2`, flat code generator |
+| Linux compiler SHA-256 | `b4b5f467eeeb846b4765fb30389d9141d06d651cdc19cba06a8853bf778d52b0` |
+| `pg_vxvector.so` SHA-256 | `5dde9970fa442159c871d5145cc73ff38a35d58e2622326a2ac018a0ce933fd2` |
+| Installed worker SHA-256 | `e339fc0fa34354d48499f0282b3649f31ba7fb67c37bd7240fe345e70df09a64` |
+
+The Linux compiler reports `vxc 0.0.4` with no commit. The build container receives a `git archive` without `.git`, so the commit stamp is empty. The build info records the pin separately.
+
+The extension now links the Vx object, so the plan's Vx code runs inside the PostgreSQL backend. This build is the first since that change. It compiled and linked without errors, and every check below passed.
+
+| Check | Result |
+| --- | --- |
+| Image checks ([log](evidence/linux_postgres_2026-11-14.txt)) | Passed |
+| Extension, worker isolation, cancellation, rollback ([log](evidence/linux_extension_2026-11-14.txt)) | Passed |
+| Snapshot ([log](evidence/linux_snapshot_2026-11-14.txt)) | Passed. Concurrent inserts and updates were excluded |
+| Synthetic SQL recall ([log](evidence/linux_recall_2026-11-14.txt)) | 24 index builds, 2 centroid-only builds, 120 queries, minimum recall 1.0 |
+| Real-data recall, GloVe-25 and SIFT-128 ([log](evidence/linux_real_recall_2026-11-14.jsonl)) | 24 builds, 3,072 queries, 24 setting comparisons. All gates passed |
+
+Step 2 changed the centroids, so real-data recall was the check most likely to move. It moved slightly up:
+
+| Over the 24 settings | Milestone 4 ([log](evidence/m4_full_2026-11-04.txt)) | This run |
+| --- | --- | --- |
+| Lowest Vx mean recall | 0.9328 | 0.9422 |
+| Mean Vx recall | 0.9900 | 0.9919 |
+| Largest shortfall against VectorChord's internal training | 0.0109 | 0.0016 |
+
+### Image platform fix
+
+The image build failed on this machine. BuildKit looked for an `arm64` variant of the local base image `vxvector-postgres:17-dev`, which exists only for `amd64`.
+[scripts/build_extension.sh](../scripts/build_extension.sh) now passes `--platform` with the base image's own platform.
+Real-data recall ran on an image built with `DOCKER_DEFAULT_PLATFORM=linux/amd64` before that fix.
+The image from the fixed script installs the same worker, library, and extension files, byte for byte. The image, extension, snapshot, and synthetic recall checks passed on both images.
+
 ## Not covered
 
-- The Linux worker, the extension build, the PostgreSQL image, the SQL suite, the snapshot check, and real-data recall were not rebuilt or rerun. The Step 2 gap remains.
+- Internal objective comparisons ([internal_objectives.md](internal_objectives.md)) were not rerun.
 - Release-profile and `-O3` builds were not checked.

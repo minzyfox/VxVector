@@ -1,0 +1,189 @@
+NOTICE:  extension "pg_vxvector" already exists, skipping
+CREATE EXTENSION
+BEGIN
+CREATE SCHEMA
+CREATE TABLE
+INSERT 0 64
+CREATE TABLE
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+INSERT 0 1
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+INSERT 0 1
+DO
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+INFO:  maintain: number_of_formerly_allocated_pages = 0
+INFO:  maintain: number_of_freshly_allocated_pages = 3
+INFO:  maintain: number_of_freed_pages = 3
+INSERT 0 1
+SET
+SET
+DO
+                            QUERY PLAN                             
+-------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Index Scan using flat_idx on source (actual rows=5 loops=1)
+         Order By: (features <-> '[10,0]'::vector)
+ Planning Time: 0.051 ms
+ Execution Time: 5.539 ms
+(5 rows)
+
+DROP INDEX
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+INFO:  maintain: number_of_formerly_allocated_pages = 0
+INFO:  maintain: number_of_freshly_allocated_pages = 3
+INFO:  maintain: number_of_freed_pages = 3
+INSERT 0 1
+SET
+DO
+                            QUERY PLAN                             
+-------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Index Scan using tree_idx on source (actual rows=5 loops=1)
+         Order By: (features <-> '[10,0]'::vector)
+ Planning Time: 0.073 ms
+ Execution Time: 0.243 ms
+(5 rows)
+
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+INSERT 0 1
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+INSERT 0 1
+CREATE FUNCTION
+ expect_error 
+--------------
+ 
+(1 row)
+
+ expect_error 
+--------------
+ 
+(1 row)
+
+ expect_error 
+--------------
+ 
+(1 row)
+
+ expect_error 
+--------------
+ 
+(1 row)
+
+CREATE TABLE
+INSERT 0 2
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+ expect_error 
+--------------
+ 
+(1 row)
+
+INSERT 0 1
+ expect_error 
+--------------
+ 
+(1 row)
+
+DELETE 1
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+ expect_error 
+--------------
+ 
+(1 row)
+
+DO
+CREATE ROLE
+GRANT
+CREATE TABLE
+INSERT 0 1
+CREATE TABLE
+INSERT 0 1
+ALTER TABLE
+CREATE POLICY
+GRANT
+SET
+ expect_error 
+--------------
+ 
+(1 row)
+
+ expect_error 
+--------------
+ 
+(1 row)
+
+SET
+SET
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+ expect_error 
+--------------
+ 
+(1 row)
+
+SET
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+ expect_error 
+--------------
+ 
+(1 row)
+
+SET
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+DO
+SET
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+DO
+SET
+SET
+CREATE TABLE
+INSERT 0 2
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+                                                                                                                                                                                                      create_vector_index                                                                                                                                                                                                       
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"dims": 2, "rows": 2, "seed": 42, "index": null, "nodes": 2, "backend": "cpu", "samples": 2, "timings": {"count_seconds": 0.00028, "index_seconds": 0.000000084, "sample_seconds": 0.000140458, "transfer_seconds": 0.000047667, "clustering_seconds": 0.000857958, "worker_read_seconds": 0.000122124, "centroid_write_seconds": 0.001703375}, "buffer_bytes": 65796, "centroid_table": "vxvector_m3_smoke.large_centroids"}
+(1 row)
+
+DO
+CREATE TABLE
+INSERT 0 4
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+ expect_error 
+--------------
+ 
+(1 row)
+
+DO
+DROP INDEX
+CREATE SCHEMA
+ALTER EXTENSION
+WARNING:  GPU acceleration is unavailable; running CPU k-means
+INFO:  maintain: number_of_formerly_allocated_pages = 0
+INFO:  maintain: number_of_freshly_allocated_pages = 3
+INFO:  maintain: number_of_freed_pages = 3
+INSERT 0 1
+SET
+                                               QUERY PLAN                                                
+---------------------------------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Index Scan using relocated_idx on source (actual rows=5 loops=1)
+         Order By: (features OPERATOR(vxvector_vector_types.<->) '[10,0]'::vxvector_vector_types.vector)
+ Planning Time: 0.063 ms
+ Execution Time: 0.079 ms
+(5 rows)
+
+                                                                                                                                                                                                                               result                                                                                                                                                                                                                                
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"dims": 2, "rows": 64, "seed": 42, "index": null, "nodes": 5, "backend": "cpu", "samples": 64, "timings": {"count_seconds": 0.007710917, "index_seconds": 0.000000333, "sample_seconds": 0.000081126, "transfer_seconds": 0.000144459, "clustering_seconds": 0.000586208, "worker_read_seconds": 0.000109919, "centroid_write_seconds": 0.004138417}, "buffer_bytes": 69144, "centroid_table": "vxvector_m3_smoke.sample_centroids"}
+ {"dims": 2, "rows": 64, "seed": 42, "index": null, "nodes": 5, "backend": "cpu", "samples": 64, "timings": {"count_seconds": 0.0001305, "index_seconds": 0.000000042, "sample_seconds": 0.0000805, "transfer_seconds": 0.000152333, "clustering_seconds": 0.000578375, "worker_read_seconds": 0.000105417, "centroid_write_seconds": 0.001131833}, "buffer_bytes": 69648, "centroid_table": "vxvector_m3_smoke.repeat_centroids"}
+ {"dims": 2, "rows": 64, "seed": 42, "index": "vxvector_m3_smoke.flat_idx", "nodes": 5, "backend": "cpu", "samples": 64, "timings": {"count_seconds": 0.00013175, "index_seconds": 0.025315875, "sample_seconds": 0.0000895, "transfer_seconds": 0.000117, "clustering_seconds": 0.000649375, "worker_read_seconds": 0.000127791, "centroid_write_seconds": 0.0015845}, "buffer_bytes": 69648, "centroid_table": "vxvector_m3_smoke.flat_centroids"}
+ {"dims": 2, "rows": 64, "seed": 42, "index": "vxvector_m3_smoke.tree_idx", "nodes": 7, "backend": "cpu", "samples": 64, "timings": {"count_seconds": 0.000130292, "index_seconds": 0.771607542, "sample_seconds": 0.000081041, "transfer_seconds": 0.000098375, "clustering_seconds": 0.0005935, "worker_read_seconds": 0.000109208, "centroid_write_seconds": 0.001566}, "buffer_bytes": 69696, "centroid_table": "vxvector_m3_smoke.tree_centroids"}
+ {"dims": 2, "rows": 64, "seed": 42, "index": null, "nodes": 5, "backend": "cpu", "samples": 64, "timings": {"count_seconds": 0.000134042, "index_seconds": 0.000000083, "sample_seconds": 0.000078417, "transfer_seconds": 0.000103, "clustering_seconds": 0.000619958, "worker_read_seconds": 0.000107874, "centroid_write_seconds": 0.001616542}, "buffer_bytes": 69648, "centroid_table": "vxvector_m3_smoke.ip_centroids"}
+ {"dims": 2, "rows": 64, "seed": 42, "index": null, "nodes": 5, "backend": "cpu", "samples": 64, "timings": {"count_seconds": 0.000097584, "index_seconds": 0.000000166, "sample_seconds": 0.000083333, "transfer_seconds": 0.000097666, "clustering_seconds": 0.00067325, "worker_read_seconds": 0.000113249, "centroid_write_seconds": 0.001516667}, "buffer_bytes": 69648, "centroid_table": "vxvector_m3_smoke.cos_centroids"}
+ {"dims": 2, "rows": 64, "seed": 42, "index": "vxvector_m3_smoke.relocated_idx", "nodes": 5, "backend": "cpu", "samples": 64, "timings": {"count_seconds": 0.000145833, "index_seconds": 0.013399833, "sample_seconds": 0.000091084, "transfer_seconds": 0.000092291, "clustering_seconds": 0.000685583, "worker_read_seconds": 0.00012075, "centroid_write_seconds": 0.00153275}, "buffer_bytes": 69648, "centroid_table": "vxvector_m3_smoke.relocated_centroids"}
+(7 rows)
+
+ROLLBACK
+                                  result                                   
+---------------------------------------------------------------------------
+ CPU extension, worker isolation, cancellation, and rollback checks passed
+(1 row)
+

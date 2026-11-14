@@ -1,0 +1,74 @@
+BEGIN
+DO
+                                                           version                                                            
+------------------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 17.11 (Debian 17.11-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit
+(1 row)
+
+ extname | extversion 
+---------+------------
+ vchord  | 1.1.1
+ vector  | 0.8.2
+(2 rows)
+
+ shared_preload_libraries 
+--------------------------
+ vchord
+(1 row)
+
+CREATE SCHEMA
+CREATE TABLE
+INSERT 0 1024
+CREATE TABLE
+INSERT 0 5
+INFO:  maintain: number_of_formerly_allocated_pages = 4
+INFO:  maintain: number_of_freshly_allocated_pages = 0
+INFO:  maintain: number_of_freed_pages = 4
+CREATE INDEX
+INFO:  maintain: number_of_formerly_allocated_pages = 4
+INFO:  maintain: number_of_freshly_allocated_pages = 0
+INFO:  maintain: number_of_freed_pages = 4
+ANALYZE
+SET
+SET
+DO
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Index Scan using vxvector_image_flat_idx on items (actual rows=5 loops=1)
+         Order By: (features <-> '[10,0,0]'::vector)
+ Planning Time: 0.082 ms
+ Execution Time: 0.431 ms
+(5 rows)
+
+DROP INDEX
+CREATE TABLE
+INSERT 0 7
+INFO:  maintain: number_of_formerly_allocated_pages = 4
+INFO:  maintain: number_of_freshly_allocated_pages = 0
+INFO:  maintain: number_of_freed_pages = 4
+CREATE INDEX
+SET
+DO
+                                   QUERY PLAN                                    
+---------------------------------------------------------------------------------
+ Limit (actual rows=5 loops=1)
+   ->  Index Scan using vxvector_image_tree_idx on items (actual rows=5 loops=1)
+         Order By: (features <-> '[10,0,0]'::vector)
+ Planning Time: 0.031 ms
+ Execution Time: 0.255 ms
+(5 rows)
+
+ROLLBACK
+PostgreSQL image checks passed; smoke tables and indexes were rolled back.
+cc (Debian 12.2.0-14+deb12u1) 12.2.0
+Copyright (C) 2022 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+Debian clang version 14.0.6
+Target: x86_64-pc-linux-gnu
+Thread model: posix
+InstalledDir: /usr/bin
+cargo 1.90.0 (840b83a10 2025-07-30)
+rustc 1.90.0 (1159e78c4 2025-09-14)

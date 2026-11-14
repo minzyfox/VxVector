@@ -57,7 +57,7 @@ existing Vx tree contains work you want to keep.
 
 The current pin is `423a10dbbd91230df290494f9705a746dc444baf`, a commit on Vx `main`.
 [The pin update record](docs/vx_pin_update_2026-11-14.md) validates the native build at this pin.
-The Linux worker and PostgreSQL image have not been rebuilt at this pin yet.
+The same record covers the Linux worker, the extension, and the PostgreSQL image at this pin.
 The scripts default to `../../Vx` when `VX_ROOT` is unset. The fresh-checkout
 example overrides that default with its adjacent `../Vx` directory.
 

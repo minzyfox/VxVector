@@ -28,9 +28,9 @@ The [pin update record](vx_pin_update_2026-11-14.md) repeats those native checks
 
 The CPU core, bounded sampling adapter, separate worker, and PostgreSQL/VectorChord integration are implemented.
 The adapter's logic is in Vx since Step 2. Its kernel ABI is `vxvector_kmeans_v2`.
-The installed Linux worker and saved Linux build manifests still identify Vx `c9612a1f` and an earlier kernel source hash.
-The extension build now links the Vx object and has not been run since that change.
-PostgreSQL, recall, and objective results remain evidence for their recorded source and compiler revisions.
+The Linux worker, the extension, and the PostgreSQL image are rebuilt at `423a10db`. The extension links the Vx object.
+The [pin update record](vx_pin_update_2026-11-14.md#linux-and-postgresql) covers the PostgreSQL suites, snapshot, synthetic recall, and real-data recall at that revision.
+Internal objective results remain evidence for their recorded source and compiler revisions.
 No GPU execution has been performed.
 
 The NVIDIA-oriented [GPU prototype](../src/gpu_lloyd.vx) is not a validated Metal implementation.
@@ -94,7 +94,8 @@ Native checks repeated November 14, 2026, for Vx `423a10db`. See the [pin update
 - [x] Keep in C only what Vx cannot express, or record why not. Allocation, the clock, and the message text stay in C by choice, for the reasons in the record. The row-reader callback works from Vx.
 - [x] Rerun the Step 1 checks and the data-path tests, including allocation failure and sanitizers, and record new hashes.
   Sample rows and plans match the C implementation exactly. Centroids change, as the record explains.
-- [ ] Build the Linux worker and the extension, which now links the Vx object, and rerun the PostgreSQL suite and recall.
+- [x] Build the Linux worker and the extension, which now links the Vx object, and rerun the PostgreSQL suite and recall.
+  Done November 14, 2026, at Vx `423a10db`. See the [pin update record](vx_pin_update_2026-11-14.md#linux-and-postgresql).
 - [x] Check the Vx finding that an assigned call result loses its `ensures`. It is [vx-lang/Vx#3040](https://github.com/vx-lang/Vx/issues/3040), already open.
 - [ ] Low priority, does not block Step 3: remove [src/data_path.c](../src/data_path.c) by moving its last parts to Vx.
   - Export the `vxvector_*_v1` functions from Vx, and write the error messages into `vxvector_data_error` from Vx.
@@ -104,8 +105,7 @@ Native checks repeated November 14, 2026, for Vx `423a10db`. See the [pin update
 Out of scope: [pg_vxvector/src/bridge.c](../pg_vxvector/src/bridge.c) and the Rust wrapper, which depend on PostgreSQL internals, and the process and pipe code in [src/worker.c](../src/worker.c).
 
 Exit: `src/data_path.c` contains only Vx gaps that have recorded issues, or exceptions with recorded reasons. The array API and the streaming adapter choose the same sample for the same seed and rows.
-PostgreSQL and recall revalidation still waits for packaging of the refreshed worker, as in Step 1.
-The Linux build needs a check before then, because the extension build changed.
+PostgreSQL and recall were revalidated with the refreshed worker on November 14, 2026.
 
 ## Step 3: execute standalone L2 clustering on Apple Metal
 
