@@ -31,7 +31,7 @@ The adapter's logic is in Vx since Step 2. Its kernel ABI is `vxvector_kmeans_v2
 The Linux worker, the extension, and the PostgreSQL image are rebuilt at `423a10db`. The extension links the Vx object.
 The [pin update record](vx_pin_update_2026-11-14.md#linux-and-postgresql) covers the PostgreSQL suites, snapshot, synthetic recall, and real-data recall at that revision.
 Internal objective results remain evidence for their recorded source and compiler revisions.
-No GPU execution has been performed.
+L2 training runs on the Apple GPU as a standalone library since Step 3. Nothing calls it yet.
 
 The NVIDIA-oriented [GPU prototype](../src/gpu_lloyd.vx) is not a validated Metal implementation.
 Its ordinary loops and compilation result do not establish useful GPU parallelism.
@@ -111,14 +111,19 @@ PostgreSQL and recall were revalidated with the refreshed worker on November 14,
 
 Run this directly on macOS, outside PostgreSQL and Linux Docker.
 
-- [ ] Define the GPU precision policy, tolerances, finite-value handling, tie policy, and empty-cluster replacement behavior.
-- [ ] Preserve the CPU f64-distance baseline. Validate any f32 GPU policy explicitly rather than silently changing CPU semantics.
-- [ ] Implement bounded point assignment and centroid updates using supported Apple backend operations.
-- [ ] Validate actual launch parallelism and race-free reductions. Choose partial buffers and merging if atomics are unavailable.
-- [ ] Keep samples, centroids, assignments, and reusable scratch resident across Lloyd iterations.
-- [ ] Record device completion before host reads, buffer reuse, and release.
-- [ ] Compare one fixed L2 input with the CPU reference and independent objective calculations.
-- [ ] Require Metal dispatch evidence. A host copy or CPU fallback cannot satisfy this step.
+Complete November 14, 2026, for Vx `423a10db` on an Apple M2 Pro. See the [Step 3 record](step3_metal_l2.md).
+
+- [x] Define the GPU precision policy, tolerances, finite-value handling, tie policy, and empty-cluster replacement behavior.
+  float32 distances are the only difference from the CPU. Fixed inputs must match bit for bit. The near-tie tolerance is left to Step 5.
+- [x] Preserve the CPU f64-distance baseline. Validate any f32 GPU policy explicitly rather than silently changing CPU semantics.
+- [x] Implement bounded point assignment and centroid updates using supported Apple backend operations.
+- [x] Validate actual launch parallelism and race-free reductions. Choose partial buffers and merging if atomics are unavailable.
+  Metal has no float atomics. One block owns each center and one lane owns each dimension, and the `across` checker proves no shared writes.
+- [x] Keep samples, centroids, assignments, and reusable scratch resident across Lloyd iterations.
+- [x] Record device completion before host reads, buffer reuse, and release.
+- [x] Compare one fixed L2 input with the CPU reference and independent objective calculations.
+  Eleven inputs, including 8,192 SIFT-128 vectors, match the CPU kernel and a NumPy reference bit for bit. Five kernel mutations are caught.
+- [x] Require Metal dispatch evidence. A host copy or CPU fallback cannot satisfy this step.
 
 Exit: one real L2 training operation executes on Apple GPU with correct bounded results and cleanup.
 Do not add transfer overlap, multiple devices, or general tuning infrastructure to this first result.
@@ -192,6 +197,7 @@ Exit: reproducible end-to-end measurements support each performance claim, inclu
 - [Step 1 CPU baseline record](step1_cpu_baseline_2026-11-09.md).
 - [Step 2 data path record](step2_data_path_vx_2026-11-11.md).
 - [Vx pin update to 423a10db](vx_pin_update_2026-11-14.md).
+- [Step 3 Metal L2 record](step3_metal_l2.md).
 - [November 8 Vx usage review](vx_usage_review_2026-11-08.md) and [Vx issue drafts](vx_issue_drafts_2026-11-08.md).
 
 These references supply procedures and evidence. They do not add prerequisites or override this sequence.

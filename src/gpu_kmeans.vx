@@ -1,0 +1,129 @@
+// L2 k-means on the Apple GPU (Step 3 of docs/pg_vxvector.md).
+//
+// One restart of Lloyd's algorithm on samples that the caller already chose
+// and gathered, in sample order. The policy is in docs/step3_metal_l2.md. It
+// follows run_restart in src/kmeans.vx:
+// - Seeds: center c starts at sample c * n / k.
+// - Assignment: the nearest center by squared L2 distance. A tie keeps the
+//   lower index. The GPU adds the distance in f32, where the CPU uses f64.
+// - Update: each center is the f32 sum of its samples, in sample order,
+//   divided by their count, as on the CPU. No atomics: one block owns a
+//   center, and one lane owns a dimension of it.
+// - Empty cluster: center c takes sample (c + iteration) % n.
+// - A sum that is not finite sets overflow[c][d]. The CPU stops at once with
+//   status 1. The GPU finishes, and the caller reports the same status.
+//
+// Every tensor is in GPU memory for the whole run. The caller allocates them
+// with vx_metal_alloc, so Metal uses them in place, with no copies.
+import core::convert;
+import core::num;
+
+// Whether value is finite. x - x is 0 for a finite x, and NaN for an infinity
+// or a NaN. f32::is_finite has no `ensures writes_only()`, so an `across`
+// loop cannot call it (see docs/step3_metal_l2.md).
+fn finite_f32(value: f32) on Topology::Device -> bool
+ensures writes_only()
+{
+  return value - value == 0.0;
+}
+
+// Center c of k starts at sample c * n / k.
+pub fn vxvector_gpu_seed_v1(centers: &mut Tensor<f32, [?, ?], Memory::HBM>,
+  samples: &Tensor<f32, [?, ?], Memory::HBM>, n: i32, k: i32, dims: i32) -> void {
+  spawn on(Topology::Device) {
+    for c in 0..k across blocks {
+      for d in 0..dims across lanes(256) {
+        let position = (i64::from(c) * i64::from(n) / i64::from(k)) as i32;
+        centers[c][d] = samples[position][d];
+      }
+    }
+  }
+  return;
+}
+
+// labels[r] becomes the nearest of the k centers to sample r.
+pub fn vxvector_gpu_assign_v1(labels: &mut Tensor<i32, [?], Memory::HBM>,
+  samples: &Tensor<f32, [?, ?], Memory::HBM>,
+  centers: &Tensor<f32, [?, ?], Memory::HBM>, n: i32, k: i32, dims: i32) -> void {
+  spawn on(Topology::Device) {
+    for chunk in 0..(n + 255) / 256 across blocks {
+      for lane in 0..256 across lanes {
+        let row = chunk * 256 + lane;
+        if row < n {
+          let mut best = 0;
+          let mut best_distance: f32 = 0.0;
+          for c in 0..k {
+            let mut squared: f32 = 0.0;
+            for d in 0..dims {
+              let difference = samples[row][d] - centers[c][d];
+              squared = squared + difference * difference;
+            }
+            if c == 0 || squared < best_distance {
+              best = c;
+              best_distance = squared;
+            }
+          }
+          labels[row] = best;
+        }
+      }
+    }
+  }
+  return;
+}
+
+// Each center becomes the mean of its samples, or the replacement sample when
+// it has none. counts[c] receives the size of cluster c.
+pub fn vxvector_gpu_update_v1(centers: &mut Tensor<f32, [?, ?], Memory::HBM>,
+  counts: &mut Tensor<i32, [?], Memory::HBM>,
+  overflow: &mut Tensor<i32, [?, ?], Memory::HBM>,
+  labels: &Tensor<i32, [?], Memory::HBM>,
+  samples: &Tensor<f32, [?, ?], Memory::HBM>,
+  n: i32, k: i32, dims: i32, iteration: i32) -> void {
+  spawn on(Topology::Device) {
+    for c in 0..k across blocks {
+      for d in 0..dims across lanes(256) {
+        let mut sum: f32 = 0.0;
+        let mut count = 0;
+        let mut finite = 1;
+        for r in 0..n {
+          if labels[r] == c {
+            sum = sum + samples[r][d];
+            count = count + 1;
+            if !finite_f32(sum) {
+              finite = 0;
+            }
+          }
+        }
+        if count == 0 {
+          centers[c][d] = samples[(c + iteration) % n][d];
+        } else {
+          centers[c][d] = sum / (count as f32);
+        }
+        if d == 0 {
+          counts[c] = count;
+        }
+        if finite == 0 {
+          overflow[c][d] = 1;
+        }
+      }
+    }
+  }
+  return;
+}
+
+// Runs iterations of Lloyd's algorithm from the seeds, then assigns each
+// sample to its nearest final center.
+pub fn vxvector_gpu_l2_run_v1(centers: &mut Tensor<f32, [?, ?], Memory::HBM>,
+  labels: &mut Tensor<i32, [?], Memory::HBM>,
+  counts: &mut Tensor<i32, [?], Memory::HBM>,
+  overflow: &mut Tensor<i32, [?, ?], Memory::HBM>,
+  samples: &Tensor<f32, [?, ?], Memory::HBM>,
+  n: i32, k: i32, dims: i32, iterations: i32) -> void {
+  vxvector_gpu_seed_v1(centers, samples, n, k, dims);
+  for iteration in 0..iterations {
+    vxvector_gpu_assign_v1(labels, samples, centers, n, k, dims);
+    vxvector_gpu_update_v1(centers, counts, overflow, labels, samples, n, k, dims, iteration);
+  }
+  vxvector_gpu_assign_v1(labels, samples, centers, n, k, dims);
+  return;
+}

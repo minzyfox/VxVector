@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-14",
+  "platform": "macOS 27.2.1 arm64, Apple M2 Pro",
+  "vx_revision": "423a10dbbd91230df290494f9705a746dc444baf",
+  "compiler_version": "vxc 0.0.4 (423a10db)",
+  "compiler_sha256": "18889bbc6e837615e38f3ef6c76ceb50a78f909931645132e43670e83b61a6b3",
+  "machine_file": "fleet/m4-uma.vx",
+  "machine_file_sha256": "ba065488412c9c7008de00da1607f4248e0ae538c9ffddaf7445c0ede9581c53",
+  "metal_runtime": {
+    "path": "~/dev/Vx/target/debug/build/vxc-c6dad883b3c42ca8/out/libvx_npu_dispatch.dylib",
+    "sha256": "1543e64f9e50ee9e3dc13d0d395014d15126d0be740144eaee5659bd3063de6d",
+    "math_mode": "MTLMathModeSafe"
+  },
+  "sources": {
+    "src/gpu_kmeans.vx": "669cda740d42b533bc25cc8be7a0a371b4723b562db6e722b0b722dbb1abfa09",
+    "src/gpu_l2.c": "5cfb6456c3b0298115145029b396ff0ce32cf565193a01569f80a1bf45b32c70",
+    "include/vxvector_gpu.h": "9c013ce2bc2953cac3aa501b9b3fc43c0b9b4295c98724c1424bda606e9b87e0",
+    "scripts/build_gpu.sh": "235da45f12df031e7fe9e119c47b536192e8c465ddd9a2822194102825ddccc5",
+    "scripts/check_gpu_l2.py": "bce11b0ea12b439ddf69784e3059e95b6f357c154703136fb39f98bddec435c7",
+    "src/kmeans.vx": "53f3962d49951ab26b11b878e06db9c79904bcb741f42ea53febb88cc1179a82"
+  },
+  "artifacts": {
+    "build/gpu/gpu_kmeans.o": "c3622ef6cb276c7e5d915ab8057c561b86344f9b2e3e50ed3b45a0c4282072da",
+    "build/gpu/gpu_l2.o": "f4ebed56dce0e477e477c730bbf76b2dcce60708dd61d7c8a019a60d124bb0e7",
+    "build/gpu/libvxvector_gpu.dylib": "8065c5e370a4196566b3a8f0b5473bfbc62fbea8cb442567214d4d9bbb5b65b7",
+    "build/libvxvector_kmeans.dylib": "36d3121c3b458c34ceaf4e6119a638f294bf0fd810a3a42524f560178c554008"
+  },
+  "generated_msl_sha256": "8ab511b0cd6a7235f754c630bdd966d70c4f47fa3da5e22263d4755ec13c7b4a",
+  "dataset": {
+    "build/datasets/sift-128-euclidean.hdf5": "dd6f0a6ed6b7ebb8934680f861a33ed01ff33991eaee4fd60914d854a0ca5984"
+  }
+}

@@ -1,0 +1,5 @@
+{"mutation":"ties_to_higher_index","check_exit":1,"failed_cases":"empty_clusters empty_replacement ","result":"caught"}
+{"mutation":"wrong_empty_replacement","check_exit":1,"failed_cases":"empty_replacement ","result":"caught"}
+{"mutation":"wrong_seed","check_exit":1,"failed_cases":"blobs wide_rows one_past_a_block uniform empty_replacement every_sample_a_center sift_8192 ","result":"caught"}
+{"mutation":"skipped_last_row","check_exit":1,"failed_cases":"blobs wide_rows one_past_a_block uniform empty_clusters empty_replacement one_center every_sample_a_center sift_8192 ","result":"caught"}
+{"mutation":"no_overflow_flag","check_exit":1,"failed_cases":"sum_overflow ","result":"caught"}

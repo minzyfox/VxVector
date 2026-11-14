@@ -1,0 +1,561 @@
+[case] blobs
+[Vx Metal] made a buffer of 524288 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_1 with 5 args
+[Vx Metal] vx_npu_kernel_1: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.022 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.411 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 1.795 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.410 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 1.783 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.410 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 1.788 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.410 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 1.788 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.423 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 2.072 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.411 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 1.640 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.227 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.915 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.190 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.857 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.190 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.855 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.189 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.855 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 16 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.190 ms on the GPU
+[Vx Metal] freed 524288 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[case] wide_rows
+[Vx Metal] made a buffer of 1212416 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_1 with 5 args
+[Vx Metal] vx_npu_kernel_1: grid 10 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.019 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 2.338 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 10 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.528 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 1.132 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 10 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.431 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 1.072 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 10 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.432 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 1.073 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 10 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.434 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 1.071 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 10 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.431 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 1.252 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 10 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.431 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 1.073 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 10 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.433 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 1.072 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 10 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.431 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 1.072 ms on the GPU
+[Vx Metal] freed 1212416 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[case] one_past_a_block
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_1 with 5 args
+[Vx Metal] vx_npu_kernel_1: grid 7 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.016 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 2 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.018 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 7 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.115 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 2 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.020 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 7 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.112 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 2 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.020 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 7 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.114 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 2 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.020 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 7 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.114 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 2 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.020 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 7 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.114 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 2 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.020 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 7 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.114 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 2 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.020 ms on the GPU
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[case] uniform
+[Vx Metal] made a buffer of 147456 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_1 with 5 args
+[Vx Metal] vx_npu_kernel_1: grid 33 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.016 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 8 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.451 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 33 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.732 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 8 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.447 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 33 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.593 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 8 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.326 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 33 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.535 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 8 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.326 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 33 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.535 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 8 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.326 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 33 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.538 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 8 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.327 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 33 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.539 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 8 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.325 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 33 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.535 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 8 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.448 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 33 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.598 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 8 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.326 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 33 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.535 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 8 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.325 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 33 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.535 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 8 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.325 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 33 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.535 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 8 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.326 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 33 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.535 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 8 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.326 ms on the GPU
+[Vx Metal] freed 147456 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[case] empty_clusters
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_1 with 5 args
+[Vx Metal] vx_npu_kernel_1: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.022 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.018 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.044 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.018 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.043 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.018 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.043 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.018 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.043 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.018 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.046 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.018 ms on the GPU
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[case] empty_replacement
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_1 with 5 args
+[Vx Metal] vx_npu_kernel_1: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.015 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.018 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.051 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.018 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.045 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.018 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.044 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.018 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.043 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.018 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 4 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.042 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.018 ms on the GPU
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[case] one_center
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_1 with 5 args
+[Vx Metal] vx_npu_kernel_1: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.013 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.016 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.076 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.013 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.075 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.013 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.075 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.013 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.075 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.013 ms on the GPU
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[case] every_sample_a_center
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_1 with 5 args
+[Vx Metal] vx_npu_kernel_1: grid 9 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.014 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.025 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 9 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.016 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.025 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 9 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.016 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.025 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 9 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.016 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.025 ms on the GPU
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[case] no_iterations
+[case] sum_overflow
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_1 with 5 args
+[Vx Metal] vx_npu_kernel_1: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.012 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.012 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.015 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.011 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.015 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 1 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.012 ms on the GPU
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[case] sift_8192
+[Vx Metal] made a buffer of 4194304 bytes of GPU memory
+[Vx Metal] made a buffer of 32768 bytes of GPU memory
+[Vx Metal] made a buffer of 32768 bytes of GPU memory
+[Vx Metal] made a buffer of 16384 bytes of GPU memory
+[Vx Metal] made a buffer of 32768 bytes of GPU memory
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_1 with 5 args
+[Vx Metal] vx_npu_kernel_1: grid 64 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.021 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 32 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 11.943 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 64 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 2.202 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 32 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 6.353 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 64 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.973 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 32 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 4.578 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 64 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.968 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 32 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 4.579 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 64 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.964 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 32 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 4.581 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 64 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.964 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 32 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 4.578 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 64 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.961 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 32 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 4.580 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 64 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.961 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 32 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 4.578 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 64 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.959 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 32 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 4.578 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 64 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.960 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 32 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 4.580 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_2 with 9 args
+[Vx Metal] vx_npu_kernel_2: grid 64 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 0.960 ms on the GPU
+[Vx Dispatcher] Intercepted kernel dispatch: vx_npu_kernel_0 with 6 args
+[Vx Metal] vx_npu_kernel_0: grid 32 x 1 x 1, block 256
+[Vx Metal] waited for 1 kernel, 4.578 ms on the GPU
+[Vx Metal] freed 4194304 bytes of GPU memory
+[Vx Metal] freed 32768 bytes of GPU memory
+[Vx Metal] freed 32768 bytes of GPU memory
+[Vx Metal] freed 16384 bytes of GPU memory
+[Vx Metal] freed 32768 bytes of GPU memory

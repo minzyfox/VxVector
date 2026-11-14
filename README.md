@@ -486,6 +486,21 @@ VX_CHECK_GPU=1 ./scripts/build.sh
 The benchmark executables and libraries live in ignored `build/`.
 The GPU command checks compilation only. It does not validate execution on a GPU.
 
+### Apple GPU (Metal) L2 training
+
+On macOS with Apple silicon, build the Metal library and check it against the CPU
+kernel. Use `arch -arm64` if your shell runs under Rosetta. Download the SIFT dataset
+first, as in [Complete CPU and database suite](#complete-cpu-and-database-suite),
+or the SIFT case is skipped:
+
+```sh
+arch -arm64 ./scripts/build_gpu.sh
+arch -arm64 build/correctness-venv/bin/python -B scripts/check_gpu_l2.py
+```
+
+This covers one restart of L2 training, and nothing calls it from SQL yet.
+See the [Step 3 record](docs/step3_metal_l2.md) for the policy and the results.
+
 ## Library API
 
 [`include/vxvector_kmeans.h`](include/vxvector_kmeans.h) defines the C ABI.
