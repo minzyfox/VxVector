@@ -55,8 +55,8 @@ If you already have both checkouts, set `VX_ROOT` to a checkout at the exact
 commit in [vx-revision.txt](vx-revision.txt). Use a separate checkout if your
 existing Vx tree contains work you want to keep.
 
-The current pin is `df51035df9cd0c7f2477a803f7e6ea985cd9cf71`, a commit on Vx `main`.
-[The Step 2 record](docs/step2_data_path_vx_2026-11-11.md) validates the native build at this pin.
+The current pin is `423a10dbbd91230df290494f9705a746dc444baf`, a commit on Vx `main`.
+[The pin update record](docs/vx_pin_update_2026-11-14.md) validates the native build at this pin.
 The Linux worker and PostgreSQL image have not been rebuilt at this pin yet.
 The scripts default to `../../Vx` when `VX_ROOT` is unset. The fresh-checkout
 example overrides that default with its adjacent `../Vx` directory.
@@ -348,7 +348,7 @@ name, set `VXVECTOR_POSTGRES_CONTAINER` to its PostgreSQL container name.
 
 This step builds a library for your host operating system, separate from the Linux
 worker inside Docker. Install a C/Clang compiler, Rust, LLVM/MLIR 22, and Z3 using
-the [pinned Vx build instructions](https://github.com/vx-lang/Vx/tree/df51035df9cd0c7f2477a803f7e6ea985cd9cf71#quickstart).
+the [pinned Vx build instructions](https://github.com/vx-lang/Vx/tree/423a10dbbd91230df290494f9705a746dc444baf#quickstart).
 Use LLVM major version 22 even if a newer version is installed.
 
 Set `VX_ROOT` to your pinned Vx checkout. It is already set if you followed the

@@ -339,7 +339,7 @@ requires initialized(centers, (k as i64) * (dims as i64))
 }
 
 // A float comparison as a branch condition crashes the prover: it sends `0.0`
-// to z3 in integer logic (vx-lang/Vx#3145, open on df51035d). A call keeps
+// to z3 in integer logic (vx-lang/Vx#3145, open on 423a10db). A call keeps
 // the comparison out of the facts.
 fn positive(value: f64) -> bool {
   return value > 0.0;

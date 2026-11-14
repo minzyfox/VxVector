@@ -1,0 +1,9 @@
+fn f(n: i32, x: f64) -> i32
+requires n > 0
+{
+  let mut s = 0;
+  if x > 0.0 { s = 1; }
+  for i in 0..n invariant s >= 0 { s = s + 1; }
+  return s;
+}
+fn main() -> i32 { return f(3, 1.5); }

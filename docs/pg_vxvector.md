@@ -22,8 +22,9 @@ Each Vx gap needs a recorded issue, and each exception a recorded reason, rather
 
 ## Current state and evidence limits
 
-The project pins Vx `df51035d` (main, November 11) in [vx-revision.txt](../vx-revision.txt).
-The [Step 2 record](step2_data_path_vx_2026-11-11.md) validates the current kernel and data path with that compiler on native macOS arm64.
+The project pins Vx `423a10db` (main, November 14) in [vx-revision.txt](../vx-revision.txt).
+The [Step 2 record](step2_data_path_vx_2026-11-11.md) validates the current kernel and data path on native macOS arm64 at `df51035d`.
+The [pin update record](vx_pin_update_2026-11-14.md) repeats those native checks at `423a10db`, which emits the same `kmeans.o`.
 
 The CPU core, bounded sampling adapter, separate worker, and PostgreSQL/VectorChord integration are implemented.
 The adapter's logic is in Vx since Step 2. Its kernel ABI is `vxvector_kmeans_v2`.
@@ -80,6 +81,7 @@ Convert this layer to Vx before GPU work so that one sampling policy feeds both 
 This is items D1 and D2 of the [November 8 usage review](vx_usage_review_2026-11-08.md), extended to the whole file.
 
 Native work complete November 11, 2026, for Vx `df51035d` on macOS arm64. See the [Step 2 record](step2_data_path_vx_2026-11-11.md).
+Native checks repeated November 14, 2026, for Vx `423a10db`. See the [pin update record](vx_pin_update_2026-11-14.md).
 
 - [x] Convert `vxvector_plan_cpu_v1` to Vx: option validation, overflow-checked buffer sizing, and the memory-budget check.
 - [x] Convert the sampler to Vx: SplitMix64, Floyd's selection with its hash table, and the position sort.
@@ -189,6 +191,7 @@ Exit: reproducible end-to-end measurements support each performance claim, inclu
 - [Naming and rename-validation record](rename_vxvector.md).
 - [Step 1 CPU baseline record](step1_cpu_baseline_2026-11-09.md).
 - [Step 2 data path record](step2_data_path_vx_2026-11-11.md).
+- [Vx pin update to 423a10db](vx_pin_update_2026-11-14.md).
 - [November 8 Vx usage review](vx_usage_review_2026-11-08.md) and [Vx issue drafts](vx_issue_drafts_2026-11-08.md).
 
 These references supply procedures and evidence. They do not add prerequisites or override this sequence.
