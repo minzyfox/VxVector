@@ -1,20 +1,41 @@
 # VxVector
 
 VxVector is a PostgreSQL extension that trains k-means centroids in Vx and uses them
-to build a VectorChord vector-search index. The current implementation runs on CPU.
-GPU execution with automatic CPU selection is the next priority; Apple Metal is the first target.
-The [active roadmap](docs/pg_vxvector.md) is the single source of truth for implementation order.
-CPU SIMD tuning follows the working GPU path.
+to build a VectorChord vector-search index.
 
 - **pgvector** provides the `vector` data type and distance operators.
-- **VxVector** samples source vectors and trains centroids in a separate CPU worker.
+- **VxVector** samples source vectors and trains centroids in a separate worker process.
 - **VectorChord** builds the `vchordrq` index and serves nearest-neighbor queries.
 
 The extension is `pg_vxvector` 0.1.0. Its SQL API uses the `vxvector` schema.
 See [the rename notes](docs/rename_vxvector.md) for changed names and validation.
 The repository URL and checkout folder remain `vextor`.
-It is intended for development and testing. Larger-data recall, performance,
-installation packages, upgrades, and other platforms still need validation.
+It is intended for development and testing. Installation packages, upgrades, and
+production-scale recall and performance still need validation.
+
+## What works today
+
+| Capability | Status |
+| --- | --- |
+| Training from SQL, then building a VectorChord index | Works, on the **CPU**. Tested in the Docker PostgreSQL image below |
+| Training on an Apple GPU (Metal) | Works in the standalone worker, for every option: L2, inner product, cosine, restarts, spherical centroids, and two-level trees. **SQL does not use it yet** |
+| Automatic GPU or CPU selection | In the standalone worker (protocol version 2): `auto`, `cpu`, or `gpu`, with the reason reported |
+| PostgreSQL using the GPU | Not yet. The extension sends worker protocol version 1, which trains on the CPU. Step 6 of the [roadmap](docs/pg_vxvector.md) |
+| Installing into your own PostgreSQL | Possible in principle, but **untested**. See [Install into an existing PostgreSQL](#install-into-an-existing-postgresql-untested) |
+| NVIDIA GPUs | Not supported. `src/gpu_lloyd.vx` is an untested compilation prototype |
+
+GPU results match the CPU bit for bit for L2 and the inner product in every test. Cosine,
+and spherical centroids on some inputs, can differ at float32 near-ties within a
+declared tolerance: an objective within 1e-3 of the CPU's, and at most 3.5e-4 observed.
+See the [Step 5 record](docs/step5_gpu_options.md).
+
+Measured on an Apple M2 Pro, 100,000 SIFT-128 rows and 256 leaves: GPU training takes
+0.28 to 1.0 seconds, 24 to 28 times faster than the CPU kernel at `-O3`. The CPU kernel
+uses one thread. These are single-machine measurements, not benchmarks.
+
+The [active roadmap](docs/pg_vxvector.md) is the single source of truth for implementation order.
+The dated records under `docs/` describe each step's validation. Their raw logs
+(`docs/evidence/`) are kept outside the repository.
 
 Start with [Build from source](#build-from-source) for a fresh checkout.
 If the images already exist, go to [Start the existing Docker setup](#start-the-existing-docker-setup).
@@ -25,6 +46,7 @@ Then follow the SQL walkthrough below to create, index, and query a small table.
 
 ### Prerequisites
 
+- Access to the `minzyfox/vextor` repository, which is private.
 - Git, Docker, and Docker Compose with a running Docker engine.
 - Python 3.14 for the host scripts and the pinned correctness-test environment.
 - Internet access for source checkouts, container images, and optional test datasets.
@@ -42,6 +64,7 @@ VxVector to live:
 ```sh
 git clone https://github.com/minzyfox/vextor.git
 cd vextor
+git checkout step1-baseline-and-roadmap
 git clone https://github.com/minzyfox/Vx.git ../Vx
 export VX_ROOT="$(cd ../Vx && pwd)"
 git -C "$VX_ROOT" fetch origin "$(cat vx-revision.txt)"
@@ -49,15 +72,18 @@ git -C "$VX_ROOT" checkout --detach "$(cat vx-revision.txt)"
 cp .env.example .env
 ```
 
+The work described here is on the `step1-baseline-and-roadmap` branch until it is
+merged into `main`. After the merge, skip the `git checkout` line.
+
 Edit `.env` and set `VXVECTOR_POSTGRES_PASSWORD` to a local development password.
 The default port is `15432`. Keep an existing `.env` when reusing a database volume.
 If you already have both checkouts, set `VX_ROOT` to a checkout at the exact
 commit in [vx-revision.txt](vx-revision.txt). Use a separate checkout if your
 existing Vx tree contains work you want to keep.
 
-The current pin is `df51035df9cd0c7f2477a803f7e6ea985cd9cf71`, a commit on Vx `main`.
-[The Step 2 record](docs/step2_data_path_vx_2026-11-11.md) validates the native build at this pin.
-The Linux worker and PostgreSQL image have not been rebuilt at this pin yet.
+The current pin is `423a10dbbd91230df290494f9705a746dc444baf`, a commit on Vx `main`.
+[The pin update record](docs/vx_pin_update_2026-11-14.md) validates the native build at this pin.
+The same record covers the Linux worker, the extension, and the PostgreSQL image at this pin.
 The scripts default to `../../Vx` when `VX_ROOT` is unset. The fresh-checkout
 example overrides that default with its adjacent `../Vx` directory.
 
@@ -191,7 +217,8 @@ The centroid table contains five nodes: a zero-vector root and four leaves.
 The root has `parent = NULL`; each leaf has parent `0`.
 
 The function returns JSON with `backend = "cpu"`, output names, row/sample counts,
-node count, buffer bytes, and stage timings. It emits this expected warning:
+node count, buffer bytes, and stage timings. Training from SQL always uses the CPU
+today, even on a machine with a supported GPU. It emits this expected warning:
 
 ```text
 GPU acceleration is unavailable; running CPU k-means
@@ -298,9 +325,47 @@ Probe settings must match the number of levels in the index being queried.
 Use a separate demo table when experimenting with a different tree depth.
 The CPU kernels use borrowed metric enums and explicit pointer contracts.
 They compute only the quantities required by the selected metric.
-Builds require Vx's flat code generator. Explicit SIMD tuning remains future work.
+Builds require Vx's flat code generator. The CPU kernel is compiled at `-O3`, which
+gives the same bits as `-O0` ([record](docs/cpu_o3_2026-11-14.md)). It uses one thread,
+and explicit SIMD and threading remain future work.
 See [the Vx main update](docs/vx_main_update_2026-11-04.md) for rationale and validation.
-See the [active roadmap](docs/pg_vxvector.md) for baseline refresh, Apple GPU execution, CPU fallback, and PostgreSQL integration.
+See the [active roadmap](docs/pg_vxvector.md) for PostgreSQL GPU integration and the remaining work.
+
+## Install into an existing PostgreSQL (untested)
+
+This path has not been run. The steps mirror what the Docker image installs
+(`docker/Dockerfile.extension`). Treat it as a starting point, not instructions
+that are known to work.
+
+You need PostgreSQL 17 with its server headers, pgvector, and VectorChord. The image
+uses pgvector 0.8.2 and VectorChord 1.1.1, with `shared_preload_libraries = 'vchord'`.
+On macOS 27, VectorChord 1.1.1 builds from source but does not load (see Step 6 in the
+[roadmap](docs/pg_vxvector.md)), so this path is blocked there for now.
+
+1. Build Vx and the native library as in [Prepare the native CPU tests](#prepare-the-native-cpu-tests).
+   This gives `build/kmeans.o` and `build/vxvector-worker`.
+2. Build the extension against your server. Run this from the repository, with
+   `pg_config` from your PostgreSQL:
+
+   ```sh
+   (cd pg_vxvector && PGRX_PG_CONFIG_PATH="$(command -v pg_config)" \
+     VXVECTOR_KERNEL_OBJECT="$PWD/../build/kmeans.o" cargo build --locked)
+   ```
+
+3. Install the extension where your server looks for it:
+   - `pg_vxvector/target/debug/libpg_vxvector.so` (`.dylib` on macOS) to `$(pg_config --pkglibdir)`,
+     named `pg_vxvector` with the suffix that the other libraries there use
+   - `pg_vxvector/pg_vxvector.control` and `pg_vxvector/sql/pg_vxvector--0.1.0.sql` to `$(pg_config --sharedir)/extension/`
+4. Point the extension at the native worker by setting `vxvector.worker_path` in
+   `postgresql.conf` to the absolute path of `build/vxvector-worker`. It is a superuser setting.
+   The native worker finds `build/libvxvector_kmeans` and Vx's runtime library through
+   absolute paths into this repository and the Vx checkout. So leave both checkouts in
+   place, and make them readable by the server's operating-system user. The Docker image
+   builds a worker without these dependencies (`docker/Dockerfile.extension`).
+5. Restart the server, then run `CREATE EXTENSION vector; CREATE EXTENSION vchord; CREATE EXTENSION pg_vxvector;`.
+
+Then run the [SQL walkthrough](#create-a-table-and-insert-dummy-data). Training uses the
+CPU on this path too.
 
 ## Clean up the example
 
@@ -348,7 +413,7 @@ name, set `VXVECTOR_POSTGRES_CONTAINER` to its PostgreSQL container name.
 
 This step builds a library for your host operating system, separate from the Linux
 worker inside Docker. Install a C/Clang compiler, Rust, LLVM/MLIR 22, and Z3 using
-the [pinned Vx build instructions](https://github.com/vx-lang/Vx/tree/df51035df9cd0c7f2477a803f7e6ea985cd9cf71#quickstart).
+the [pinned Vx build instructions](https://github.com/vx-lang/Vx/tree/423a10dbbd91230df290494f9705a746dc444baf#quickstart).
 Use LLVM major version 22 even if a newer version is installed.
 
 Set `VX_ROOT` to your pinned Vx checkout. It is already set if you followed the
@@ -381,9 +446,12 @@ Run the CPU-only suite without PostgreSQL or downloaded datasets:
 bash scripts/check_cpu.sh
 ```
 
-The runner builds the native worker, then runs 25 library/adapter/worker tests and ten objective-scorer/parser tests,
-48 matched Faiss cases, 96 independent Lloyd cases, six zero/duplicate cases,
-and allocation-failure/sanitizer checks. It exits nonzero if a check fails.
+The runner builds the native worker and a stand-in GPU library, then runs 54 unit
+tests: library, adapter, worker, objective-scorer, and backend-selection tests. Next
+come 48 matched Faiss cases, 96 independent Lloyd cases, six zero/duplicate cases, and
+allocation-failure and sanitizer checks. When `scripts/build_gpu.sh` has built the
+Metal library, three of the unit tests also train on the real GPU. Otherwise they are
+skipped. The runner exits nonzero if a check fails.
 
 ### Complete CPU and database suite
 
@@ -441,9 +509,9 @@ These checks do not establish a proof of the complete kernel.
 Use `"$VX_ROOT/target/debug/vxc" src/kmeans.vx --audit` to list trusted pointer clauses.
 The audit identifies trust boundaries; it does not prove them.
 
-The [November 4 upgraded-worker results](docs/evidence/vx_main_test_summary_2026-11-04.json)
-and [full recorded log](docs/evidence/vx_main_checks_2026-11-04.txt) used Vx `7cc3d2d9`.
-See [the proof update](docs/m4_index_proofs_2026-11-05.md) for the current pin.
+The audit lists 56 trusted clauses at the current pin, all at C boundaries
+([Step 5 record](docs/step5_gpu_options.md#results)).
+See [the proof update](docs/m4_index_proofs_2026-11-05.md) for the proof history.
 See the [CPU correctness reference](docs/milestone_4_cpu_correctness.md) for recorded tolerances and evidence.
 Use the [active roadmap](docs/pg_vxvector.md) for remaining work.
 
@@ -486,6 +554,38 @@ VX_CHECK_GPU=1 ./scripts/build.sh
 The benchmark executables and libraries live in ignored `build/`.
 The GPU command checks compilation only. It does not validate execution on a GPU.
 
+### Apple GPU (Metal) training
+
+On macOS with Apple silicon, build the Metal library and check it against the CPU
+kernel. Use `arch -arm64` if your shell runs under Rosetta. Download the SIFT dataset
+first, as in [Complete CPU and database suite](#complete-cpu-and-database-suite),
+or the SIFT cases are skipped:
+
+```sh
+arch -arm64 ./scripts/build.sh
+arch -arm64 ./scripts/build_gpu.sh
+arch -arm64 build/correctness-venv/bin/python -B scripts/check_gpu_l2.py
+arch -arm64 bash scripts/check_cpu.sh
+```
+
+`check_gpu_l2.py` runs 97 GPU training runs: every metric, spherical centroids, and
+split launches. It compares each with the CPU kernel, an independent NumPy reference,
+and the Metal dispatch log. `check_cpu.sh` then also runs the real-GPU worker tests.
+
+The native worker loads `libvxvector_gpu.dylib` from beside itself, or from
+`VXVECTOR_GPU_LIBRARY`, so CPU-only installs need no GPU library. Worker protocol
+version 2 takes a mode (`auto`, `cpu`, or `gpu`). It reports the backend, the reason
+for it, the device, the library version, and the GPU's allocation, copy, and training
+times. Version 1, which the extension sends, always trains on the CPU.
+
+Each GPU launch is kept to about 2 ms of work. macOS can stop a long launch, and the Vx
+runtime then aborts the process. Training runs in the worker process, so an abort ends
+the worker, not PostgreSQL.
+
+Details are in the [Step 3](docs/step3_metal_l2.md), [Step 4](docs/step4_backend_selection.md),
+and [Step 5](docs/step5_gpu_options.md) records. Vx issues found along the way are drafted in
+[docs/vx_issue_drafts_2026-11-14.md](docs/vx_issue_drafts_2026-11-14.md).
+
 ## Library API
 
 [`include/vxvector_kmeans.h`](include/vxvector_kmeans.h) defines the C ABI.
@@ -517,7 +617,13 @@ error messages.
 The reader must provide a stable row order and count/scan snapshot. The adapter
 checks the declared row count but cannot enforce a database snapshot itself.
 The PostgreSQL extension supplies the reader, worker isolation, and index creation described above.
-GPU acceleration comes later. See [M2 details](docs/milestone_2_data_path.md).
+See [M2 details](docs/milestone_2_data_path.md).
+
+`vxvector_select_backend_v1` and `vxvector_run_v2` add backend selection. Selection
+happens before any row is read. With the GPU selected, training runs through the
+functions of [`include/vxvector_gpu.h`](include/vxvector_gpu.h), and the result has the
+CPU's layout. A GPU failure after training starts is reported, and the CPU does not
+train again.
 
 `./scripts/check_data_path.sh` runs native allocation-failure checks with address
 and undefined-behavior sanitizers. `build/benchmark_data_path` generates rows one
@@ -526,7 +632,7 @@ batch size, and optional buffer budget in bytes (default 64 MiB).
 The reported budget covers adapter buffers. It excludes caller-owned source
 storage, allocator overhead, and Vx runtime memory.
 
-`src/gpu_lloyd.vx` is a separate GPU prototype that accepts device-resident
+The Apple GPU kernels are in `src/gpu_kmeans.vx`. `src/gpu_lloyd.vx` is an older, separate NVIDIA prototype that accepts device-resident
 samples and initialized centroids. `VX_CHECK_GPU=1` checks that Vx generates
 A100 code without requiring GPU hardware. The generated code has no parallel
 launch metadata for the assignment and reduction loops. This path is untested

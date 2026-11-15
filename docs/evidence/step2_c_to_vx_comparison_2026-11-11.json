@@ -1,9 +1,0 @@
-{
-  "description": "vxvector_plan_cpu_v1 and data-path sample rows of the C implementation at 0ac7c98 (Vx 7e3cf6a3) compared with the Vx implementation (Vx df51035d), on the same inputs",
-  "plan_cases": 35846,
-  "plan_differences": 0,
-  "sample_cases": 204,
-  "sample_differences": 0,
-  "before_sha256": "fbc2bee2f809a774f2171cf6c74ba5669338c7b624f425bc0209dfca84ec2c43",
-  "after_sha256": "fbc2bee2f809a774f2171cf6c74ba5669338c7b624f425bc0209dfca84ec2c43"
-}

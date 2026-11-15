@@ -41,8 +41,11 @@ docker exec -w /opt/vxvector-src/pg_vxvector "$builder" sh -c \
   > "$project_root/build/linux/extension-build.log" 2>&1
 docker cp "$builder:/opt/vxvector-src/pg_vxvector/target/debug/libpg_vxvector.so" \
   "$project_root/build/linux/libpg_vxvector.so"
+# Build for the platform of the local base image. BuildKit otherwise looks for
+# a host-platform variant, which an amd64 image on an arm64 host lacks.
+platform="$(docker image inspect vxvector-postgres:17-dev --format '{{.Os}}/{{.Architecture}}')"
 if docker buildx version >/dev/null 2>&1; then
-  docker build -f "$project_root/docker/Dockerfile.extension" -t "$image" "$project_root"
+  docker build --platform "$platform" -f "$project_root/docker/Dockerfile.extension" -t "$image" "$project_root"
 else
-  DOCKER_BUILDKIT=0 docker build -f "$project_root/docker/Dockerfile.extension" -t "$image" "$project_root"
+  DOCKER_BUILDKIT=0 docker build --platform "$platform" -f "$project_root/docker/Dockerfile.extension" -t "$image" "$project_root"
 fi

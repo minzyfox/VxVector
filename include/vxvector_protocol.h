@@ -21,7 +21,33 @@ struct vxvector_worker_reply {
     char message[256];
 };
 
+/* Version 2 adds backend selection (Step 4). The request names a mode from
+ * enum vxvector_backend_mode. Each reply adds the backend that was chosen,
+ * why, the GPU memory it needs, and the device name. The worker answers a
+ * version 1 request as before, on the CPU. */
+#define VXVECTOR_WORKER_MAGIC_V2 UINT64_C(0x32524b5758544556)
+struct vxvector_worker_request_v2 {
+    uint64_t magic;
+    struct vxvector_cpu_options options;
+    int32_t backend_mode, reserved;
+};
+
+struct vxvector_worker_reply_v2 {
+    struct vxvector_worker_reply base;
+    int32_t backend, reason;
+    uint64_t gpu_bytes;
+    char device[64];
+    char reason_text[128];
+    /* The GPU's share of clustering_seconds, from vxvector_gpu_timings in
+     * vxvector_gpu.h, and the GPU library's version. Zero and empty on the CPU. */
+    double gpu_allocation_seconds, gpu_copy_in_seconds, gpu_training_seconds,
+        gpu_copy_out_seconds;
+    char gpu_version[64];
+};
+
 _Static_assert(sizeof(struct vxvector_cpu_options) == 56, "CPU options ABI changed");
+_Static_assert(sizeof(struct vxvector_worker_request_v2) == 72, "Worker request v2 ABI changed");
+_Static_assert(sizeof(struct vxvector_worker_reply_v2) == 616, "Worker reply v2 ABI changed");
 _Static_assert(sizeof(struct vxvector_worker_request) == 64, "Worker request ABI changed");
 _Static_assert(sizeof(struct vxvector_worker_reply) == 312, "Worker reply ABI changed");
 #endif

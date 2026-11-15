@@ -1,4 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE /* CLOCK_MONOTONIC_RAW */
+#endif
 /* The C side of the CPU data path. The option checks, buffer sizing, sampling,
  * row reads and checks, and clustering are in src/kmeans.vx. This file keeps
  * the parts that stay in C:
@@ -32,6 +35,9 @@ enum vxvector_data_outcome {
     OUTCOME_NONFINITE_ROW,
     OUTCOME_KMEANS_REJECTED,
     OUTCOME_NONFINITE_CENTROID,
+    OUTCOME_INVALID_BACKEND,
+    OUTCOME_GPU_REQUIRED,
+    OUTCOME_GPU_FAILED,
     OUTCOME_COUNT
 };
 
@@ -51,7 +57,29 @@ static const struct {
     {VXVECTOR_DATA_INVALID, "Source contains a nonfinite vector component"},
     {VXVECTOR_DATA_KMEANS, "Vx CPU k-means rejected the collected sample"},
     {VXVECTOR_DATA_KMEANS, "Vx CPU k-means produced a nonfinite centroid"},
+    {VXVECTOR_DATA_INVALID, "Invalid backend mode"},
+    {VXVECTOR_DATA_GPU, "GPU training was required, but the GPU cannot run this request"},
+    {VXVECTOR_DATA_GPU, "GPU training failed after it started; it was not run again on the CPU"},
 };
+
+static const char *const reasons[] = {
+    "CPU requested",
+    "GPU available and supports the request",
+    "GPU library not installed",
+    "No Metal device, or Metal is turned off",
+    "The GPU supports only the L2 metric",
+    "The GPU supports only one restart",
+    "The GPU does not support spherical centroids",
+    "The GPU does not support root centroids",
+    "The sample is too large for the GPU kernels",
+    "CPU and GPU buffers together exceed the memory budget",
+};
+
+const char *vxvector_backend_reason_v1(int32_t reason) {
+    if (reason < 0 || reason >= (int32_t)(sizeof reasons / sizeof reasons[0]))
+        return "Unknown backend reason";
+    return reasons[reason];
+}
 
 /* The buffers of one run. This mirrors CpuBuffers in src/kmeans.vx. */
 struct vxvector_cpu_buffers {
@@ -72,11 +100,31 @@ struct vxvector_cpu_buffers {
 /* Defined in src/kmeans.vx. */
 int32_t vxvector_plan_cpu_reason_v1(const struct vxvector_cpu_options *options,
                                     struct vxvector_cpu_plan *plan);
-int32_t vxvector_run_cpu_reason_v1(const struct vxvector_cpu_options *options,
-                                   const struct vxvector_cpu_plan *plan,
-                                   vxvector_next_row_fn next, void *context,
-                                   struct vxvector_input_row *row, double (*clock)(void),
-                                   const struct vxvector_cpu_buffers *buffers);
+int32_t vxvector_run_reason_v2(const struct vxvector_cpu_options *options,
+                               const struct vxvector_cpu_plan *plan,
+                               vxvector_next_row_fn next, void *context,
+                               struct vxvector_input_row *row, double (*clock)(void),
+                               const struct vxvector_cpu_buffers *buffers, int32_t backend,
+                               int32_t (*gpu_restart)(const float *, int32_t, int32_t, int32_t,
+                                                      int32_t, int32_t, int32_t, int32_t,
+                                                      float *, int32_t *),
+                               int32_t (*gpu_assign)(const float *, int32_t, int32_t,
+                                                     const float *, int32_t, int32_t,
+                                                     int32_t *));
+int32_t vxvector_select_backend_reason_v1(const struct vxvector_cpu_options *options,
+                                          const struct vxvector_cpu_plan *plan, int32_t mode,
+                                          int32_t probe, struct vxvector_backend_choice *choice);
+/* Stand-ins that fill the GPU arguments on the CPU, which never calls them. */
+static int32_t no_gpu_restart(const float *p, int32_t r, int32_t d, int32_t k, int32_t i,
+                              int32_t m, int32_t h, int32_t s, float *c, int32_t *l) {
+    (void)p, (void)r, (void)d, (void)k, (void)i, (void)m, (void)h, (void)s, (void)c, (void)l;
+    return 2;
+}
+static int32_t no_gpu_assign(const float *p, int32_t r, int32_t d, const float *c, int32_t k,
+                             int32_t m, int32_t *l) {
+    (void)p, (void)r, (void)d, (void)c, (void)k, (void)m, (void)l;
+    return 2;
+}
 
 static int32_t fail(struct vxvector_data_error *error, int32_t code,
                     const char *message) {
@@ -99,10 +147,32 @@ int32_t vxvector_plan_cpu_v1(const struct vxvector_cpu_options *o,
     return report(error, vxvector_plan_cpu_reason_v1(o, plan));
 }
 
+int32_t vxvector_select_backend_v1(const struct vxvector_cpu_options *o,
+                                   const struct vxvector_cpu_plan *plan, int32_t mode,
+                                   int32_t probe, struct vxvector_backend_choice *choice,
+                                   struct vxvector_data_error *error) {
+    if (!o || !plan || !choice)
+        return fail(error, VXVECTOR_DATA_INVALID, "Options, plan, and a choice are required");
+    int32_t status = report(error, vxvector_select_backend_reason_v1(o, plan, mode, probe, choice));
+    if (status == VXVECTOR_DATA_GPU && error)
+        snprintf(error->message, sizeof(error->message),
+                 "GPU training was required, but the GPU cannot run this request: %s",
+                 vxvector_backend_reason_v1(choice->reason));
+    return status;
+}
+
 #ifndef VXVECTOR_PLAN_ONLY
+/* CLOCK_MONOTONIC counts in microseconds on macOS, too coarse for a fast
+ * training phase. CLOCK_MONOTONIC_RAW counts in tens of nanoseconds there. */
+#if defined(__APPLE__) && defined(CLOCK_MONOTONIC_RAW)
+#define VXVECTOR_CLOCK CLOCK_MONOTONIC_RAW
+#else
+#define VXVECTOR_CLOCK CLOCK_MONOTONIC
+#endif
+
 static double seconds(void) {
     struct timespec time;
-    if (clock_gettime(CLOCK_MONOTONIC, &time) != 0)
+    if (clock_gettime(VXVECTOR_CLOCK, &time) != 0)
         return 0.0;
     return (double)time.tv_sec + (double)time.tv_nsec / 1e9;
 }
@@ -122,11 +192,24 @@ int32_t vxvector_run_cpu_v1(const struct vxvector_cpu_options *o,
                             vxvector_next_row_fn next, void *context,
                             struct vxvector_cpu_result *result,
                             struct vxvector_data_error *error) {
+    struct vxvector_backend_choice cpu = {VXVECTOR_BACKEND_CPU, VXVECTOR_REASON_CPU_REQUESTED, 0};
+    return vxvector_run_v2(o, &cpu, NULL, next, context, result, error);
+}
+
+int32_t vxvector_run_v2(const struct vxvector_cpu_options *o,
+                        const struct vxvector_backend_choice *choice,
+                        const struct vxvector_gpu_trainer *gpu,
+                        vxvector_next_row_fn next, void *context,
+                        struct vxvector_cpu_result *result,
+                        struct vxvector_data_error *error) {
     if (!result)
         return fail(error, VXVECTOR_DATA_INVALID, "A CPU result destination is required");
     memset(result, 0, sizeof(*result));
     if (!next)
         return fail(error, VXVECTOR_DATA_INVALID, "A source row reader is required");
+    if (!choice || (choice->backend == VXVECTOR_BACKEND_GPU &&
+                    (!gpu || !gpu->restart || !gpu->assign)))
+        return fail(error, VXVECTOR_DATA_INVALID, "A backend choice, and a GPU trainer for the GPU, are required");
     struct vxvector_cpu_result r = {0};
     int32_t status = vxvector_plan_cpu_v1(o, &r.plan, error);
     if (status != VXVECTOR_DATA_OK)
@@ -157,7 +240,10 @@ int32_t vxvector_run_cpu_v1(const struct vxvector_cpu_options *o,
     }
 
     struct vxvector_input_row row = {0};
-    status = report(error, vxvector_run_cpu_reason_v1(o, &p, next, context, &row, seconds, &b));
+    status = report(error, vxvector_run_reason_v2(o, &p, next, context, &row, seconds, &b,
+                                                  choice->backend,
+                                                  gpu ? gpu->restart : no_gpu_restart,
+                                                  gpu ? gpu->assign : no_gpu_assign));
     if (status == VXVECTOR_DATA_OK) {
         *result = r;
         memset(&r, 0, sizeof(r));

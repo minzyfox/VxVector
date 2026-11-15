@@ -20,10 +20,11 @@ def main():
     parser.add_argument('--object', type=Path)
     parser.add_argument('--revision', required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--opt-level', required=True, help='the -O level of the object')
     args = parser.parse_args()
     version = subprocess.check_output([str(args.compiler), '--version'], text=True).strip()
     args.output.write_text(json.dumps(dict(vx_revision=args.revision, compiler_version=version,
-                                          compiler_sha256=digest(args.compiler),
+                                          compiler_sha256=digest(args.compiler), opt_level=f'-O{args.opt_level}',
                                           kernel_sha256=digest(args.source), object_sha256=digest(args.object or args.source.with_suffix('.o')),
                                           platform=platform.platform()), indent=2) + '\n')
 

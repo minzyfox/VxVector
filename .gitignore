@@ -2,3 +2,4 @@
 /.env
 .DS_Store
 /pg_vxvector/target/
+/docs/evidence/

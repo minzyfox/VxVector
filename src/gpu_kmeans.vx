@@ -1,0 +1,510 @@
+// k-means on the Apple GPU (Steps 3 and 5 of docs/pg_vxvector.md).
+//
+// One restart of Lloyd's algorithm on samples that the caller already chose
+// and gathered, in sample order. The policy is in docs/step3_metal_l2.md. It
+// follows run_restart in src/kmeans.vx:
+// - Seeds: center c starts at sample (c * n / k + shift) % n, where shift is
+//   that of the restart, 0 for the first.
+// - Assignment: the nearest center by squared L2, inner product, or cosine
+//   distance. A tie keeps the lower index. The GPU adds the distance in f32,
+//   where the CPU uses f64.
+// - Update: each center is the f32 sum of its samples, in sample order,
+//   divided by their count, as on the CPU. No atomics: one block owns a
+//   center, and one lane owns a dimension of it.
+// - Empty cluster: center c takes sample (c + iteration) % n.
+// - A sum that is not finite sets overflow[c][d]. The CPU stops at once with
+//   status 1. The GPU finishes, and the caller reports the same status.
+//
+// Every tensor is in GPU memory for the whole run. The caller allocates them
+// with vx_metal_alloc, so Metal uses them in place, with no copies.
+//
+// Launches stay short. macOS can stop a launch that holds the GPU too long,
+// and the Vx runtime then aborts (docs/step3_metal_l2.md). So each launch does
+// at most about launch_work multiply-adds:
+// - Assignment covers a range of rows and a range of centers. labels and best
+//   carry each row's nearest center and its distance from one center range to
+//   the next. Centers are still compared in increasing order, with `<`.
+// - Update adds a range of rows into sums and counts, which carry the totals
+//   from one range to the next in row order. A last launch divides.
+// The splits change no result: each distance and each sum adds the same
+// numbers in the same order as one launch would.
+import core::convert;
+import core::num;
+
+// Spherical centers are normalized in float64, as normalize in src/kmeans.vx
+// does, which the GPU cannot. A Vx function cannot read GPU memory, so C does
+// it: the caller passes vxvector_gpu_normalize_rows of src/gpu_l2.c as
+// normalize. An extern declaration of it would not compile, because vxc
+// resolves extern symbols when it emits the object. vx_metal_wait, of the Vx
+// runtime, resolves, and it waits for every launch, so the centers are
+// complete when C reads them. The wait is required: vxc waits before a call
+// to an extern C function that gets GPU memory, but not before a call through
+// a function pointer (docs/vx_issue_drafts_2026-11-14.md, draft 8). Without it,
+// C reads the centers before the kernels write them.
+extern "C" {
+  fn vx_metal_wait() -> void;
+}
+
+// Whether value is finite. x - x is 0 for a finite x, and NaN for an infinity
+// or a NaN. f32::is_finite has no `ensures writes_only()`, so an `across`
+// loop cannot call it (see docs/step3_metal_l2.md).
+fn finite_f32(value: f32) on Topology::Device -> bool
+ensures writes_only()
+{
+  return value - value == 0.0;
+}
+
+// Center c of k starts at sample (c * n / k + shift) % n. Restart r of the CPU
+// kernel shifts by r * 104729 (spaced_position in src/kmeans.vx), and shift is
+// that modulo n.
+pub fn vxvector_gpu_seed_v2(centers: &mut Tensor<f32, [?, ?], Memory::HBM>,
+  samples: &Tensor<f32, [?, ?], Memory::HBM>, n: i32, k: i32, dims: i32,
+  shift: i32) -> void {
+  spawn on(Topology::Device) {
+    for c in 0..k across blocks {
+      for d in 0..dims across lanes(256) {
+        let position = ((i64::from(c) * i64::from(n) / i64::from(k) + i64::from(shift))
+          % i64::from(n)) as i32;
+        centers[c][d] = samples[position][d];
+      }
+    }
+  }
+  return;
+}
+
+// For each row in first_row..first_row + rows, compares the centers
+// first_center..first_center + center_count, in order, with the nearest center
+// so far in labels and best. With first_center 0, there is none so far.
+pub fn vxvector_gpu_assign_v2(labels: &mut Tensor<i32, [?], Memory::HBM>,
+  best: &mut Tensor<f32, [?], Memory::HBM>,
+  samples: &Tensor<f32, [?, ?], Memory::HBM>,
+  centers: &Tensor<f32, [?, ?], Memory::HBM>,
+  first_row: i32, rows: i32, first_center: i32, center_count: i32, dims: i32) -> void {
+  spawn on(Topology::Device) {
+    for chunk in 0..(rows + 255) / 256 across blocks {
+      for lane in 0..256 across lanes {
+        let row = first_row + chunk * 256 + lane;
+        if row < first_row + rows {
+          let mut label = 0;
+          let mut best_distance: f32 = 0.0;
+          if first_center > 0 {
+            label = labels[row];
+            best_distance = best[row];
+          }
+          // Eight centers at a time: each sample value is read once and
+          // updates eight distances. Each distance still adds its terms in
+          // dimension order, so the result is the same as one at a time.
+          let groups = center_count / 8;
+          for g in 0..groups {
+            let c = first_center + g * 8;
+            let mut s0: f32 = 0.0;
+            let mut s1: f32 = 0.0;
+            let mut s2: f32 = 0.0;
+            let mut s3: f32 = 0.0;
+            let mut s4: f32 = 0.0;
+            let mut s5: f32 = 0.0;
+            let mut s6: f32 = 0.0;
+            let mut s7: f32 = 0.0;
+            for d in 0..dims {
+              let x = samples[row][d];
+              let t0 = x - centers[c][d];
+              let t1 = x - centers[c + 1][d];
+              let t2 = x - centers[c + 2][d];
+              let t3 = x - centers[c + 3][d];
+              let t4 = x - centers[c + 4][d];
+              let t5 = x - centers[c + 5][d];
+              let t6 = x - centers[c + 6][d];
+              let t7 = x - centers[c + 7][d];
+              s0 = s0 + t0 * t0;
+              s1 = s1 + t1 * t1;
+              s2 = s2 + t2 * t2;
+              s3 = s3 + t3 * t3;
+              s4 = s4 + t4 * t4;
+              s5 = s5 + t5 * t5;
+              s6 = s6 + t6 * t6;
+              s7 = s7 + t7 * t7;
+            }
+            if c == 0 || s0 < best_distance {
+              label = c;
+              best_distance = s0;
+            }
+            if s1 < best_distance {
+              label = c + 1;
+              best_distance = s1;
+            }
+            if s2 < best_distance {
+              label = c + 2;
+              best_distance = s2;
+            }
+            if s3 < best_distance {
+              label = c + 3;
+              best_distance = s3;
+            }
+            if s4 < best_distance {
+              label = c + 4;
+              best_distance = s4;
+            }
+            if s5 < best_distance {
+              label = c + 5;
+              best_distance = s5;
+            }
+            if s6 < best_distance {
+              label = c + 6;
+              best_distance = s6;
+            }
+            if s7 < best_distance {
+              label = c + 7;
+              best_distance = s7;
+            }
+          }
+          for j in groups * 8..center_count {
+            let c = first_center + j;
+            let mut squared: f32 = 0.0;
+            for d in 0..dims {
+              let difference = samples[row][d] - centers[c][d];
+              squared = squared + difference * difference;
+            }
+            if c == 0 || squared < best_distance {
+              label = c;
+              best_distance = squared;
+            }
+          }
+          labels[row] = label;
+          best[row] = best_distance;
+        }
+      }
+    }
+  }
+  return;
+}
+
+// The inner product (metric 1) or cosine (metric 2) distance of a row with a
+// center, from their dot product and squared norms, all added in float32 in
+// dimension order. As on the CPU, the inner-product distance is -dot, and the
+// cosine distance is 0 for two zero vectors and 1 when only one is zero. The
+// CPU takes the square root of left * right in float64. In float32 that product
+// can overflow, so this takes the square root of each.
+fn angular(metric: i32, dot: f32, left: f32, right: f32) on Topology::Device -> f32
+ensures writes_only()
+{
+  if metric == 1 {
+    return 0.0 - dot;
+  }
+  if left == 0.0 && right == 0.0 {
+    return 0.0;
+  }
+  if left == 0.0 || right == 0.0 {
+    return 1.0;
+  }
+  return 1.0 - dot / (root(left) * root(right));
+}
+
+// The correctly rounded square root. A writes_only() function may call no
+// method, so f32::sqrt is out; math.sqrt is the same operation (Vx's
+// gpu_square_roots_are_correctly_rounded test).
+fn root(value: f32) on Topology::Device -> f32
+ensures writes_only()
+{
+  return mlir!( inputs : (%v = value : f32), returns : f32, dialects : ["math"],
+    ensures : [writes_only()]) {
+    %r = math.sqrt %v : f32
+    macro.yield %r : f32
+  };
+}
+
+// vxvector_gpu_assign_v2 for the inner product and cosine distances.
+pub fn vxvector_gpu_assign_angular_v1(labels: &mut Tensor<i32, [?], Memory::HBM>,
+  best: &mut Tensor<f32, [?], Memory::HBM>,
+  samples: &Tensor<f32, [?, ?], Memory::HBM>,
+  centers: &Tensor<f32, [?, ?], Memory::HBM>,
+  first_row: i32, rows: i32, first_center: i32, center_count: i32, dims: i32,
+  metric: i32) -> void {
+  spawn on(Topology::Device) {
+    for chunk in 0..(rows + 255) / 256 across blocks {
+      for lane in 0..256 across lanes {
+        let row = first_row + chunk * 256 + lane;
+        if row < first_row + rows {
+          let mut label = 0;
+          let mut best_distance: f32 = 0.0;
+          if first_center > 0 {
+            label = labels[row];
+            best_distance = best[row];
+          }
+          let mut xx: f32 = 0.0;
+          for d in 0..dims {
+            let x = samples[row][d];
+            xx = xx + x * x;
+          }
+          let groups = center_count / 8;
+          for g in 0..groups {
+            let c = first_center + g * 8;
+            let mut p0: f32 = 0.0;
+            let mut q0: f32 = 0.0;
+            let mut p1: f32 = 0.0;
+            let mut q1: f32 = 0.0;
+            let mut p2: f32 = 0.0;
+            let mut q2: f32 = 0.0;
+            let mut p3: f32 = 0.0;
+            let mut q3: f32 = 0.0;
+            let mut p4: f32 = 0.0;
+            let mut q4: f32 = 0.0;
+            let mut p5: f32 = 0.0;
+            let mut q5: f32 = 0.0;
+            let mut p6: f32 = 0.0;
+            let mut q6: f32 = 0.0;
+            let mut p7: f32 = 0.0;
+            let mut q7: f32 = 0.0;
+            for d in 0..dims {
+              let x = samples[row][d];
+              let y0 = centers[c + 0][d];
+              let y1 = centers[c + 1][d];
+              let y2 = centers[c + 2][d];
+              let y3 = centers[c + 3][d];
+              let y4 = centers[c + 4][d];
+              let y5 = centers[c + 5][d];
+              let y6 = centers[c + 6][d];
+              let y7 = centers[c + 7][d];
+              p0 = p0 + x * y0;
+              q0 = q0 + y0 * y0;
+              p1 = p1 + x * y1;
+              q1 = q1 + y1 * y1;
+              p2 = p2 + x * y2;
+              q2 = q2 + y2 * y2;
+              p3 = p3 + x * y3;
+              q3 = q3 + y3 * y3;
+              p4 = p4 + x * y4;
+              q4 = q4 + y4 * y4;
+              p5 = p5 + x * y5;
+              q5 = q5 + y5 * y5;
+              p6 = p6 + x * y6;
+              q6 = q6 + y6 * y6;
+              p7 = p7 + x * y7;
+              q7 = q7 + y7 * y7;
+            }
+            let e0 = angular(metric, p0, xx, q0);
+            if c == 0 || e0 < best_distance {
+              label = c;
+              best_distance = e0;
+            }
+            let e1 = angular(metric, p1, xx, q1);
+            if e1 < best_distance {
+              label = c + 1;
+              best_distance = e1;
+            }
+            let e2 = angular(metric, p2, xx, q2);
+            if e2 < best_distance {
+              label = c + 2;
+              best_distance = e2;
+            }
+            let e3 = angular(metric, p3, xx, q3);
+            if e3 < best_distance {
+              label = c + 3;
+              best_distance = e3;
+            }
+            let e4 = angular(metric, p4, xx, q4);
+            if e4 < best_distance {
+              label = c + 4;
+              best_distance = e4;
+            }
+            let e5 = angular(metric, p5, xx, q5);
+            if e5 < best_distance {
+              label = c + 5;
+              best_distance = e5;
+            }
+            let e6 = angular(metric, p6, xx, q6);
+            if e6 < best_distance {
+              label = c + 6;
+              best_distance = e6;
+            }
+            let e7 = angular(metric, p7, xx, q7);
+            if e7 < best_distance {
+              label = c + 7;
+              best_distance = e7;
+            }
+          }
+          for j in groups * 8..center_count {
+            let c = first_center + j;
+            let mut p: f32 = 0.0;
+            let mut q: f32 = 0.0;
+            for d in 0..dims {
+              let x = samples[row][d];
+              let y = centers[c][d];
+              p = p + x * y;
+              q = q + y * y;
+            }
+            let e = angular(metric, p, xx, q);
+            if c == 0 || e < best_distance {
+              label = c;
+              best_distance = e;
+            }
+          }
+          labels[row] = label;
+          best[row] = best_distance;
+        }
+      }
+    }
+  }
+  return;
+}
+
+// Sets every sum and count to zero.
+pub fn vxvector_gpu_zero_v1(sums: &mut Tensor<f32, [?, ?], Memory::HBM>,
+  counts: &mut Tensor<i32, [?], Memory::HBM>, k: i32, dims: i32) -> void {
+  spawn on(Topology::Device) {
+    for c in 0..k across blocks {
+      for d in 0..dims across lanes(256) {
+        sums[c][d] = 0.0;
+        if d == 0 {
+          counts[c] = 0;
+        }
+      }
+    }
+  }
+  return;
+}
+
+// Adds the rows first_row..first_row + rows to the sums and counts of their
+// centers, in row order. A sum that is not finite sets overflow[c][d].
+pub fn vxvector_gpu_accumulate_v1(sums: &mut Tensor<f32, [?, ?], Memory::HBM>,
+  counts: &mut Tensor<i32, [?], Memory::HBM>,
+  overflow: &mut Tensor<i32, [?, ?], Memory::HBM>,
+  labels: &Tensor<i32, [?], Memory::HBM>,
+  samples: &Tensor<f32, [?, ?], Memory::HBM>,
+  first_row: i32, rows: i32, k: i32, dims: i32) -> void {
+  spawn on(Topology::Device) {
+    for c in 0..k across blocks {
+      for d in 0..dims across lanes(256) {
+        let mut sum = sums[c][d];
+        let mut count = 0;
+        let mut finite = 1;
+        for r in first_row..first_row + rows {
+          if labels[r] == c {
+            sum = sum + samples[r][d];
+            count = count + 1;
+            if !finite_f32(sum) {
+              finite = 0;
+            }
+          }
+        }
+        sums[c][d] = sum;
+        if d == 0 {
+          counts[c] = counts[c] + count;
+        }
+        if finite == 0 {
+          overflow[c][d] = 1;
+        }
+      }
+    }
+  }
+  return;
+}
+
+// Each center becomes the mean of its samples, or the replacement sample when
+// it has none.
+pub fn vxvector_gpu_finish_update_v1(centers: &mut Tensor<f32, [?, ?], Memory::HBM>,
+  sums: &Tensor<f32, [?, ?], Memory::HBM>,
+  counts: &Tensor<i32, [?], Memory::HBM>,
+  samples: &Tensor<f32, [?, ?], Memory::HBM>,
+  n: i32, k: i32, dims: i32, iteration: i32) -> void {
+  spawn on(Topology::Device) {
+    for c in 0..k across blocks {
+      for d in 0..dims across lanes(256) {
+        let count = counts[c];
+        if count == 0 {
+          centers[c][d] = samples[(c + iteration) % n][d];
+        } else {
+          centers[c][d] = sums[c][d] / (count as f32);
+        }
+      }
+    }
+  }
+  return;
+}
+
+// The largest count in 1..=limit whose product with width stays within work.
+fn fit(work: i64, width: i64, limit: i64) -> i64 {
+  let mut count = work / width;
+  if count < 1i64 {
+    count = 1i64;
+  }
+  if count > limit {
+    count = limit;
+  }
+  return count;
+}
+
+// labels and best become the nearest center of each row, in launches of at
+// most launch_work multiply-adds. Each launch covers up to 32768 rows, so that
+// it has enough blocks to fill the GPU, and as many centers as fit, at least
+// eight.
+pub fn vxvector_gpu_assign_all_v1(labels: &mut Tensor<i32, [?], Memory::HBM>,
+  best: &mut Tensor<f32, [?], Memory::HBM>,
+  samples: &Tensor<f32, [?, ?], Memory::HBM>,
+  centers: &Tensor<f32, [?, ?], Memory::HBM>,
+  n: i32, k: i32, dims: i32, metric: i32, launch_work: i64) -> void {
+  let wide = i64::from(dims);
+  let wanted_rows = fit(32768i64, 1i64, i64::from(n));
+  let mut center_step = fit(launch_work, wanted_rows * wide, i64::from(k));
+  // The kernel compares eight centers at a time, so a launch takes at least
+  // eight when there are eight, and fewer rows to stay within launch_work.
+  if center_step < 8i64 {
+    center_step = fit(8i64, 1i64, i64::from(k));
+  }
+  let row_step = fit(launch_work, center_step * wide, i64::from(n));
+  let mut first_row = 0i64;
+  while first_row < i64::from(n) {
+    let rows = fit(i64::from(n) - first_row, 1i64, row_step);
+    let mut first_center = 0i64;
+    while first_center < i64::from(k) {
+      let count = fit(i64::from(k) - first_center, 1i64, center_step);
+      if metric == 0 {
+        vxvector_gpu_assign_v2(labels, best, samples, centers, first_row as i32, rows as i32,
+          first_center as i32, count as i32, dims);
+      } else {
+        vxvector_gpu_assign_angular_v1(labels, best, samples, centers, first_row as i32,
+          rows as i32, first_center as i32, count as i32, dims, metric);
+      }
+      first_center = first_center + count;
+    }
+    first_row = first_row + rows;
+  }
+  return;
+}
+
+// Runs iterations of Lloyd's algorithm from the seeds, then assigns each
+// sample to its nearest final center. Each launch does at most about
+// launch_work multiply-adds, or one row or center when that is more.
+pub fn vxvector_gpu_l2_run_v2(centers: &mut Tensor<f32, [?, ?], Memory::HBM>,
+  labels: &mut Tensor<i32, [?], Memory::HBM>,
+  best: &mut Tensor<f32, [?], Memory::HBM>,
+  sums: &mut Tensor<f32, [?, ?], Memory::HBM>,
+  counts: &mut Tensor<i32, [?], Memory::HBM>,
+  overflow: &mut Tensor<i32, [?, ?], Memory::HBM>,
+  samples: &Tensor<f32, [?, ?], Memory::HBM>,
+  n: i32, k: i32, dims: i32, iterations: i32, metric: i32, spherical: i32, shift: i32,
+  launch_work: i64, normalize: fn(*mut f32 in Memory::HBM, i32, i32) -> void) -> void {
+  let update_step = fit(launch_work, i64::from(k) * i64::from(dims), i64::from(n));
+  vxvector_gpu_seed_v2(centers, samples, n, k, dims, shift);
+  if spherical != 0 {
+    unsafe { vx_metal_wait(); }
+    normalize(centers.as_mut_ptr(), k, dims);
+  }
+  for iteration in 0..iterations {
+    vxvector_gpu_assign_all_v1(labels, best, samples, centers, n, k, dims, metric, launch_work);
+    vxvector_gpu_zero_v1(sums, counts, k, dims);
+    let mut first_row = 0i64;
+    while first_row < i64::from(n) {
+      let rows = fit(i64::from(n) - first_row, 1i64, update_step);
+      vxvector_gpu_accumulate_v1(sums, counts, overflow, labels, samples, first_row as i32,
+        rows as i32, k, dims);
+      first_row = first_row + rows;
+    }
+    vxvector_gpu_finish_update_v1(centers, sums, counts, samples, n, k, dims, iteration);
+    if spherical != 0 {
+      unsafe { vx_metal_wait(); }
+    normalize(centers.as_mut_ptr(), k, dims);
+    }
+  }
+  vxvector_gpu_assign_all_v1(labels, best, samples, centers, n, k, dims, metric, launch_work);
+  return;
+}
