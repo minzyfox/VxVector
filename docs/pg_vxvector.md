@@ -32,6 +32,9 @@ The Linux worker, the extension, and the PostgreSQL image are rebuilt at `423a10
 The [pin update record](vx_pin_update_2026-11-14.md#linux-and-postgresql) covers the PostgreSQL suites, snapshot, synthetic recall, and real-data recall at that revision.
 Internal objective results remain evidence for their recorded source and compiler revisions.
 L2 training runs on the Apple GPU as a standalone library since Step 3. Nothing calls it yet.
+Every PostgreSQL user trains on the CPU today: the worker has no GPU path yet (Step 4).
+The Docker setup also cannot reach Metal, because it is a Linux VM. A native macOS PostgreSQL could, and the extension needs only POSIX process calls, but that setup is untested. See the VectorChord item in Step 6.
+The Step 3 kernels are correct but not yet safe at realistic sizes. macOS can stop a long launch, and the Vx runtime then aborts. See the [Step 3 record](step3_metal_l2.md#size-limit-macos-can-stop-long-launches).
 
 The NVIDIA-oriented [GPU prototype](../src/gpu_lloyd.vx) is not a validated Metal implementation.
 Its ordinary loops and compilation result do not establish useful GPU parallelism.
@@ -164,6 +167,11 @@ Select one deployment path after standalone Metal works:
 Neither path is established by existing Linux worker tests.
 
 - [ ] Choose and validate one deployment path. Keep the current Linux CPU setup usable.
+- [ ] Low priority: VectorChord 1.1.1 does not load in native PostgreSQL 17 on macOS 27.2.1.
+  It builds from source against Homebrew `postgresql@17`, but dyld rejects `vchord.dylib` with `mis-aligned LINKEDIT string pool`: its string table starts 4-byte aligned, at `stroff` 6771756.
+  pgvector 0.8.2 builds and installs fine. A small Rust library links aligned with the same `-bundle -bundle_loader` flags and `strip = "symbols"`, so the cause is specific to VectorChord's link, probably its fat-LTO release profile with ld-27106. Re-stripping does not fix it.
+  VectorChord runs its macOS CI only on request, on macOS 15, and no upstream issue mentions this error.
+  Next: try its `dev` or `prof` profile or `lto = "off"`, then report upstream. This blocks only the native macOS path, not Steps 4 and 5.
 - [ ] Extend SQL/backend reporting and version worker communication if its contract changes.
 - [ ] Exercise SQL-to-sampling-to-GPU-training-to-centroid-table-to-VectorChord-index execution.
 - [ ] Recheck exact-scan ground truth, held-out recall, and objective quality using the existing declared gates.

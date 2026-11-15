@@ -1,0 +1,46 @@
+// Apple M2 Pro with 16 GiB of unified memory: the VxVector development Mac.
+// A local copy of Vx's fleet/m4-uma.vx at 423a10db, with this machine's numbers.
+// Pass it with `vxc --host default --machine machines/m2-pro-16g.vx`.
+//
+// It changes no code: the kernels of src/gpu_kmeans.vx compile to the same
+// bytes as with m4-uma.vx. Vx uses it for capacity checks, and only on tensors
+// whose shapes it knows when it compiles. VxVector's kernels take shapes [?, ?],
+// so Vx checks none of them against these numbers (warning W1029). Bounded
+// dynamic shapes, vx-lang/Vx#245, would change that.
+//
+// Read off this machine on November 14, 2026:
+//   hw.memsize = 17179869184 (16 GiB)
+//   hw.perflevel0.l2cachesize = 16777216 (16 MiB, P-core cluster)
+//   system_profiler SPDisplaysDataType: 16 GPU cores, Metal 4
+// UNVERIFIED: 200 GB/s is Apple's published peak for the M2 Pro, not a
+// measurement. L2 and SMEM bandwidths and the GPU clock are placeholders, as in
+// the M4 file.
+
+Memory HBM {
+  capacity: 16 GiB, bandwidth: 200 GB/s, managed: explicit, scope: device
+}
+
+Memory L2 {
+  within: Memory::HBM, capacity: 16 MiB, bandwidth: 400 GB/s, managed: cached, scope: device
+}
+
+// Metal Feature Set Tables: 32 KiB of threadgroup memory per threadgroup on the
+// Apple 8 GPU family (M2), as on the M4. replicas is the GPU core count.
+Memory SMEM {
+  within: Memory::L2, capacity: 32 KiB, bandwidth: 128 B/cyc, clock: 1.4 GHz, granule: 1 KiB, managed: explicit, scope: sm, replicas: 16
+}
+
+Topology Device {
+  arch: applegpu,
+  // Metal Feature Set Tables: at most 1024 threads in a threadgroup, and
+  // SIMD-groups of 32 threads.
+  levels: [blocks(max_lanes: 1024, memory: cta), subgroups(lanes: 32), lanes(memory: thread)],
+  memory: Memory::HBM,
+  visible: [Memory::HBM, Memory::L2, Memory::SMEM],
+  // Metal has no f64. bfloat needs Metal 3.1, which the M2 supports.
+  dtypes: [f32, bf16, f16, i8, u8, i16, u16, i32, u32, i64, u64, bool],
+  transfer Memory::CPU_DRAM -> Memory::HBM : 200 GB/s,
+  transfer Memory::HBM -> Memory::CPU_DRAM : shared,
+  transfer Memory::HBM -> Memory::L2,
+  transfer Memory::L2 -> Memory::SMEM
+}

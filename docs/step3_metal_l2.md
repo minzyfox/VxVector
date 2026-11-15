@@ -108,6 +108,31 @@ The first draft of the check missed the first two mutations. It allowed any diff
 3. **Silent CPU fallback.** With Metal off, a kernel runs its CPU copy and reports nothing to the caller. Allocation through `vx_metal_alloc` is the only check available to a library.
 4. **A device helper's symbol is global.** The first draft named its helper `finite`, which became `_finite` and collides with the C library. Vx emits private helpers as global symbols.
 
+## Size limit: macOS can stop long launches
+
+This section was added after a timing run on November 14, 2026.
+
+The display also uses the GPU. macOS can stop a launch that holds the GPU too long, with `kIOGPUCommandBufferCallbackErrorImpactingInteractivity`. The Vx runtime then prints `FATAL` and calls `abort()`, so the process that called the library dies.
+It happens at random, more often as launches get longer. Each assignment launch handles every sample, and each lane loops over all `k * dims` center values:
+
+| SIFT-128 input | Longest assignment launch | Outcome |
+| --- | --- | --- |
+| 8,192 rows, k=64 | 10 ms | passed |
+| 16,384 rows, k=192 | 34 ms | passed |
+| 32,768 rows, k=256, in three runs | 81 to 83 ms | passed twice, stopped once |
+| 65,536 rows, k=256 | 156 ms | passed once |
+
+A standalone Vx program with launches of about 75 ms failed in 5 of 7 runs. The same work split into eight launches failed in none of 5, although the batch still took 74 ms. So macOS judges each launch, not the batch.
+The fix is shorter launches, and faster ones with centers staged in threadgroup memory. The [Vx issue drafts](vx_issue_drafts_2026-11-14.md), numbers 1 and 2, ask the runtime to retry and to split launches.
+
+The 36x speed-up of a first timing (8,192 rows, k=64: CPU 2.72 s, GPU 0.08 s) compares against a CPU library built in the debug profile. It is not a performance result.
+
+## Memory is not checked at compile time
+
+The kernels take tensors of shape `[?, ?]`. Vx checks capacity only for shapes that it knows when it compiles, so every parameter gets warning W1029 (`capacity of 'HBM' not verified`), and no machine file changes that.
+A 20 GiB tensor of fixed shape is rejected against `machines/m2-pro-16g.vx` (E6009) and accepted against `fleet/m4-uma.vx`. The checks would need bounded dynamic shapes, [vx-lang/Vx#245](https://github.com/vx-lang/Vx/issues/245), which is open.
+The only limits now are the C checks (`n * dims < 2^31`) and `vx_metal_alloc`, which fails above Metal's largest buffer. Step 4 needs a memory budget for the GPU, as the CPU plan has.
+
 ## Not covered
 
 - **Performance.** No timing claims. The runtime waits after every launch. The update kernel reads every label once per center and dimension, O(k × n × dims) label reads, which suits a first result but not large k. Step 7 covers tuning.
