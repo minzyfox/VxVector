@@ -114,6 +114,21 @@ class BackendSelectionTests(unittest.TestCase):
         # The fake GPU's leaves, so the GPU trainer ran.
         self.assertTrue((run.nodes()[1:] == 7.0).all())
 
+    def test_gpu_leaves_get_cpu_roots_and_parents(self):
+        run = self.run_worker(AUTO, self.supported(root_count=2), self.points())
+        self.assertEqual((run.ready.backend, run.ready.reason), (GPU_BACKEND, GPU_SELECTED))
+        self.assertEqual(run.done.base.status, 0, run.done.base.message)
+        nodes = run.nodes()
+        self.assertEqual(nodes.shape, (1 + 2 + 4, 2))
+        # The fake GPU's leaves, and roots that the CPU trained on them.
+        self.assertTrue((nodes[3:] == 7.0).all())
+        self.assertTrue((nodes[1:3] == 7.0).all())
+        self.assertTrue((nodes[0] == 0).all())
+        base = run.done.base
+        parents = np.frombuffer(run.output[base.nodes * base.dims * 4:], dtype=np.int32)
+        self.assertEqual(parents[:3].tolist(), [-1, 0, 0])
+        self.assertTrue(set(parents[3:].tolist()) <= {1, 2})
+
     def test_cpu_mode_ignores_a_ready_gpu(self):
         run = self.run_worker(CPU, self.supported(), self.points())
         self.assertEqual((run.ready.backend, run.ready.reason), (CPU_BACKEND, CPU_REQUESTED))
@@ -136,7 +151,6 @@ class BackendSelectionTests(unittest.TestCase):
             (dict(metric=1), dict(), METRIC),
             (dict(restarts=3), dict(), RESTARTS),
             (dict(spherical=1), dict(), SPHERICAL),
-            (dict(root_count=2), dict(), ROOTS),
         ]
         for overrides, how, reason in cases:
             with self.subTest(reason=reason, overrides=overrides):
@@ -221,11 +235,13 @@ class RealGpuTests(unittest.TestCase):
         return Run(result)
 
     def test_gpu_and_cpu_workers_give_the_same_bits(self):
-        # The second case samples 512 of 3,000 rows, as the data path does.
-        for rows, dims, leaves, factor in ((2000, 16, 8, 1000), (3000, 24, 16, 32)):
-            with self.subTest(rows=rows):
+        # The second case samples 512 of 3,000 rows, as the data path does. The
+        # third has roots, which the CPU trains on the GPU's leaves.
+        for rows, dims, leaves, factor, roots in ((2000, 16, 8, 1000, 0), (3000, 24, 16, 32, 0),
+                                                   (4000, 12, 32, 64, 4)):
+            with self.subTest(rows=rows, roots=roots):
                 points = blobs(rows, dims).tolist()
-                opts = options(row_count=rows, dims=dims, leaf_count=leaves,
+                opts = options(row_count=rows, dims=dims, leaf_count=leaves, root_count=roots,
                                sampling_factor=factor, restarts=1, iterations=8,
                                batch_size=256, memory_budget_bytes=256 * 1024 * 1024)
                 gpu = self.run_real(AUTO, opts, points)
@@ -237,6 +253,7 @@ class RealGpuTests(unittest.TestCase):
                 self.assertEqual(gpu.done.base.samples, min(rows, leaves * factor))
                 np.testing.assert_array_equal(gpu.nodes().view(np.uint32),
                                               cpu.nodes().view(np.uint32))
+                self.assertEqual(gpu.output, cpu.output)
 
     def test_a_killed_gpu_worker_leaves_the_gpu_usable(self):
         rows, dims, leaves = 200000, 64, 256

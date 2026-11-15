@@ -1143,10 +1143,19 @@ gpu_train: fn(*const f32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32,
   start = clock();
   let mut status = 0;
   if backend == BACKEND_GPU {
+    // The GPU trains the leaves only, straight into their place after the
+    // roots. Its node 0 and parent -1 land on the root slots, which the root
+    // training below overwrites.
+    let roots = i64::from(o.root_count);
     status = gpu_train(b.sample as *const f32, count as i32, o.dims,
-      o.root_count, o.leaf_count, o.sampling_factor, o.iterations, o.restarts,
-      o.metric, o.spherical, o.seed, b.nodes, b.parents, b.assignments,
+      0, o.leaf_count, o.sampling_factor, o.iterations, o.restarts,
+      o.metric, o.spherical, o.seed, offset_mut(b.nodes, roots * width),
+      offset_mut(b.parents, roots), b.assignments,
       b.current, b.sums, b.counts, b.positions, b.table);
+    if status == 0 && o.root_count > 0 {
+      status = train_roots(&o, b.nodes, b.parents, b.current, b.sums, b.counts,
+        b.positions, b.table);
+    }
   } else {
     status = vxvector_kmeans_v2(b.sample as *const f32, count as i32, o.dims,
       o.root_count, o.leaf_count, o.sampling_factor, o.iterations, o.restarts,
@@ -1169,6 +1178,32 @@ gpu_train: fn(*const f32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32,
     return DATA_NONFINITE_CENTROID;
   }
   return DATA_OK;
+}
+
+// Trains the roots on the CPU from the leaves in nodes, as vxvector_kmeans_v2
+// does after its own leaves: the same sample count, seed, and options, and
+// each leaf's parent is 1 + its nearest root. Roots train on leaf_count rows,
+// too few for the GPU to help. The leaves follow node 0 and the roots in
+// nodes, so the CPU kernel writes node 0 and the roots in place, and each
+// leaf's nearest root into the leaves' parents. The training scratch fits:
+// it holds leaf_count >= root_count centers and the sampler of the sample.
+fn train_roots(o: &CpuOptions, nodes: *mut f32, parents: *mut i32, current: *mut f32,
+sums: *mut f32, counts: *mut i32, positions: *mut i64, table: *mut i64) -> i32 {
+  let width = i64::from(o.dims);
+  let roots = i64::from(o.root_count);
+  let leaves: *const f32 = offset(nodes as *const f32, (1i64 + roots) * width);
+  let leaf_parents: *mut i32 = offset_mut(parents, 1i64 + roots);
+  let status = vxvector_kmeans_v2(leaves, o.leaf_count, o.dims, 0, o.root_count,
+    o.sampling_factor, o.iterations, o.restarts, o.metric, o.spherical,
+    (o.seed % 2147483646) + 1, nodes, parents, leaf_parents,
+    current, sums, counts, positions, table);
+  if status != 0 {
+    return 1;
+  }
+  for leaf in 0..o.leaf_count {
+    unsafe { leaf_parents[leaf] = leaf_parents[leaf] + 1; }
+  }
+  return 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -1257,9 +1292,6 @@ fn gpu_reason(o: &CpuOptions, p: &CpuPlan, probe: i32) -> i32 {
   }
   if o.spherical != 0 {
     return REASON_GPU_SPHERICAL;
-  }
-  if o.root_count != 0 {
-    return REASON_GPU_ROOTS;
   }
   // The kernels index with i32: n * dims and k + iterations stay below 2^31.
   let n: u64 = p.sample_count;
