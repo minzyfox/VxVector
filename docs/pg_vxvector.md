@@ -32,7 +32,7 @@ The Linux worker, the extension, and the PostgreSQL image are rebuilt at `423a10
 The [pin update record](vx_pin_update_2026-11-14.md#linux-and-postgresql) covers the PostgreSQL suites, snapshot, synthetic recall, and real-data recall at that revision.
 Internal objective results remain evidence for their recorded source and compiler revisions.
 L2 training runs on the Apple GPU as a standalone library since Step 3. Nothing calls it yet.
-Every PostgreSQL user trains on the CPU today. The standalone worker selects the GPU since Step 4, but the extension still sends version 1 requests, which train on the CPU (Step 6).
+Every PostgreSQL user trains on the CPU today. The standalone worker selects the GPU since Step 4, and supports every option on it since Step 5, but the extension still sends version 1 requests, which train on the CPU (Step 6).
 The Docker setup also cannot reach Metal, because it is a Linux VM. A native macOS PostgreSQL could, and the extension needs only POSIX process calls, but that setup is untested. See the VectorChord item in Step 6.
 The Step 3 kernels split their work into launches of at most about 2 ms, because macOS can stop a long launch and the Vx runtime then aborts. On SIFT-128 they train 24 to 28 times faster than the single-threaded `-O3` CPU kernel, with the same bits. See the [Step 3 record](step3_metal_l2.md#performance).
 
@@ -149,12 +149,18 @@ Exit: the same training request runs on a supported GPU or selects CPU before tr
 
 ## Step 5: complete standalone GPU semantics and validation
 
-- [ ] Extend the supported path to cosine, inner product, normalization, sampling, restarts, and flat/two-level output.
-- [ ] Keep unsupported combinations on the CPU in `auto`; reject them in required GPU mode.
-- [ ] Check zero vectors, empty clusters, duplicate points, non-finite inputs, awkward dimensions, and repeated execution.
-- [ ] Compare centroids, assignments, independently scored objectives, and hierarchy structure under declared tolerances.
+Complete November 14, 2026, for the standalone worker on an Apple M2 Pro, except GPU allocation-failure injection. See the [Step 5 record](step5_gpu_options.md).
+
+- [x] Extend the supported path to cosine, inner product, normalization, sampling, restarts, and flat/two-level output.
+  Roots and spherical normalization run on the CPU between GPU launches, with the CPU's own arithmetic.
+- [x] Keep unsupported combinations on the CPU in `auto`; reject them in required GPU mode.
+  Every option is now supported. What remains is the GPU library, the device, the `i32` limit, and the budget.
+- [x] Check zero vectors, empty clusters, duplicate points, non-finite inputs, awkward dimensions, and repeated execution.
+- [x] Compare centroids, assignments, independently scored objectives, and hierarchy structure under declared tolerances.
+  Bit for bit, or at float32 near-ties: nearest labels up to the tie, and an objective within 1e-3. Cosine diverges often on nearly parallel vectors.
 - [ ] Test buffer limits, allocation failure behavior, and cancellation with outstanding device work.
-- [ ] Record transfer, allocation, training, and total time separately, including dispatch evidence and backend versions.
+  The `i32` limit and cancellation are tested. GPU allocation failure is reported as status 2, but it is not injected.
+- [x] Record transfer, allocation, training, and total time separately, including dispatch evidence and backend versions.
 
 Exit: supported GPU options preserve the application's defined behavior, with explicit CPU selection for unsupported requests.
 No performance advantage is assumed from successful device execution.
@@ -216,6 +222,7 @@ Exit: reproducible end-to-end measurements support each performance claim, inclu
 - [Step 3 Metal L2 record](step3_metal_l2.md).
 - [Step 4 backend selection record](step4_backend_selection.md).
 - [CPU kernel at -O3](cpu_o3_2026-11-14.md).
+- [Step 5 GPU options record](step5_gpu_options.md).
 - [November 8 Vx usage review](vx_usage_review_2026-11-08.md) and [Vx issue drafts](vx_issue_drafts_2026-11-08.md).
 
 These references supply procedures and evidence. They do not add prerequisites or override this sequence.

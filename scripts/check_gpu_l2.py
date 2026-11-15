@@ -49,9 +49,17 @@ SIFT = PROJECT / "build/datasets/sift-128-euclidean.hdf5"
 METRIC_CASES = {"blobs", "wide_rows", "one_past_a_block", "uniform", "empty_clusters",
                 "empty_replacement", "group_ties", "one_center", "sift_8192", "large_vectors",
                 "cosine_near_ties"}
+# These cases also run with spherical centers, under each metric, through
+# vxvector_gpu_restart_v1 at the default launch budget.
+SPHERICAL_CASES = {"blobs", "wide_rows", "uniform", "empty_clusters", "empty_replacement",
+                   "group_ties", "sift_8192", "cosine_near_ties"}
 # Inputs with float32 near-ties. GPU and CPU may diverge there, and the gate is
 # the declared tolerance of docs/step5_gpu_options.md, not equal bits.
 TOLERANT_CASES = {"cosine_near_ties"}
+# Runs of other cases that met float32 near-ties: SIFT-128 against spherical
+# (unit) centers under L2, where 152 labels diverged with an objective 1.9e-8
+# from the CPU's. Every other run of these cases must stay exact.
+TOLERANT_RUNS = {"sift_8192/spherical"}
 # A label that is not the float64 nearest center is a near-tie when the gap is
 # below this, relative to the distance, or absolute for cosine.
 TIE_RELATIVE, TIE_COSINE = 1e-5, 1e-6
@@ -122,7 +130,20 @@ def run_gpu(library, samples, k, iterations, launch_work=0, metric=0):
     return status, centroids, labels, counts
 
 
-def run_cpu(library, samples, k, iterations, metric=0):
+def run_gpu_spherical(library, samples, k, iterations, metric):
+    n, dims = samples.shape
+    centroids = np.zeros((k, dims), dtype=np.float32)
+    labels = np.zeros(n, dtype=np.int32)
+    status = library.vxvector_gpu_restart_v1(
+        pointer(samples, ctypes.c_float), n, dims, k, iterations, metric, 1, 0,
+        pointer(centroids, ctypes.c_float), pointer(labels, ctypes.c_int32))
+    # restart_v1 returns 0, 1, or 2. Map them to vxvector_gpu_train_v1's codes.
+    status = {0: OK, 1: OVERFLOW, 2: UNAVAILABLE}[status]
+    counts = np.bincount(labels, minlength=k).astype(np.int32)
+    return status, centroids, labels, counts
+
+
+def run_cpu(library, samples, k, iterations, metric=0, spherical=0):
     """One restart of the CPU kernel on every sample in order."""
     n, dims = samples.shape
     factor = -(-n // k)
@@ -139,7 +160,7 @@ def run_cpu(library, samples, k, iterations, metric=0):
     table = np.zeros(slots, dtype=np.int64)
     status = library.vxvector_kmeans_v2(
         pointer(samples, ctypes.c_float), n, dims, 0, k, factor, iterations,
-        1, metric, 0, 0, pointer(nodes, ctypes.c_float),
+        1, metric, spherical, 0, pointer(nodes, ctypes.c_float),
         pointer(parents, ctypes.c_int32), pointer(labels, ctypes.c_int32),
         pointer(current, ctypes.c_float), pointer(sums, ctypes.c_float),
         pointer(counts, ctypes.c_int32), pointer(chosen, ctypes.c_int64),
@@ -189,12 +210,28 @@ def nearest(samples, centers, metric=0):
     return labels
 
 
-def reference_lloyd(samples, k, iterations, metric=0):
+def normalize(centers):
+    """normalize in src/kmeans.vx: the float64 norm, and each value divided in
+    float64 and rounded to float32. A zero row stays."""
+    wide = centers.astype(np.float64)
+    out = centers.copy()
+    for c in range(len(centers)):
+        squared = 0.0
+        for value in wide[c]:
+            squared += value * value
+        if squared > 0:
+            out[c] = (wide[c] / np.sqrt(squared)).astype(np.float32)
+    return out
+
+
+def reference_lloyd(samples, k, iterations, metric=0, spherical=0):
     """The policy of docs/step3_metal_l2.md in NumPy, independent of both Vx
     kernels: seeds at c * n // k, float64 assignment, sequential float32 sums
     in sample order (cumsum adds in order), and empty-cluster replacement."""
     n = len(samples)
     centers = samples[[c * n // k for c in range(k)]].copy()
+    if spherical:
+        centers = normalize(centers)
     for iteration in range(iterations):
         labels = nearest(samples, centers, metric)
         for c in range(k):
@@ -207,12 +244,15 @@ def reference_lloyd(samples, k, iterations, metric=0):
             if not np.isfinite(running).all():
                 return None, None
             centers[c] = running[-1] / np.float32(len(rows))
+        if spherical:
+            centers = normalize(centers)
     return centers, nearest(samples, centers, metric)
 
 
 def worker(args):
     gpu = ctypes.CDLL(os.fspath(GPU_LIBRARY))
     gpu.vxvector_gpu_train_v1.restype = ctypes.c_int32
+    gpu.vxvector_gpu_restart_v1.restype = ctypes.c_int32
     if args.unavailable:
         samples = make_input("blobs", 64, 4, 1)
         status, *_ = run_gpu(gpu, samples, 4, 2)
@@ -240,6 +280,18 @@ def worker(args):
                               launch_work=work, status=status, cpu_status=cpu_status)
                 check_case(result, samples, k, iterations, status, centroids, labels, counts,
                            cpu_status, cpu_centroids, cpu_labels, reference, reference_labels, metric)
+            if name not in SPHERICAL_CASES:
+                continue
+            cpu_status, cpu_centroids, cpu_labels = run_cpu(cpu, samples, k, iterations, metric, 1)
+            reference, reference_labels = (reference_lloyd(samples, k, iterations, metric, 1)
+                                           if cpu_status == 0 else (None, None))
+            label = base + "/spherical"
+            print(f"[case] {label}", file=sys.stderr, flush=True)
+            status, centroids, labels, counts = run_gpu_spherical(gpu, samples, k, iterations, metric)
+            result = dict(case=label, n=n, dims=dims, k=k, iterations=iterations, metric=metric,
+                          spherical=1, launch_work=DEFAULT_WORK, status=status, cpu_status=cpu_status)
+            check_case(result, samples, k, iterations, status, centroids, labels, counts,
+                       cpu_status, cpu_centroids, cpu_labels, reference, reference_labels, metric)
 
 
 def check_case(result, samples, k, iterations, status, centroids, labels, counts,
@@ -300,7 +352,8 @@ def gate(row):
         relative = (row["objective"] - row["cpu_objective"]) / max(abs(row["cpu_objective"]), 1e-30)
         row["exact"] = exact
         row["objective_relative"] = relative
-        if row["case"].split("/")[0].split("@")[0] in TOLERANT_CASES:
+        name = row["case"].split("@")[0]
+        if name.split("/")[0] in TOLERANT_CASES or name in TOLERANT_RUNS:
             # float32 near-ties: every label must still be the nearest center
             # up to a near-tie (not_nearest above), and the objective must stay
             # within the tolerance of the CPU's.

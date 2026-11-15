@@ -54,6 +54,21 @@ int32_t vxvector_gpu_train_v1(const float *samples, int32_t n, int32_t dims,
                               int32_t *counts);
 
 /*
+ * Step 5: the time of the calls on this thread since the last reset.
+ * Allocation includes release, which waits for any GPU work on the memory.
+ * Training is the Vx call, which waits for the GPU before it returns.
+ */
+struct vxvector_gpu_timings {
+    double allocation_seconds, copy_in_seconds, training_seconds, copy_out_seconds;
+    uint64_t calls;
+};
+void vxvector_gpu_reset_timings_v1(void);
+void vxvector_gpu_timings_v1(struct vxvector_gpu_timings *timings);
+
+/* The backend and the Vx revision that built this library. */
+const char *vxvector_gpu_version_v1(void);
+
+/*
  * Step 4: whether this library can train, and the device name. Returns
  * VXVECTOR_GPU_OK, or VXVECTOR_GPU_UNAVAILABLE when there is no Metal device
  * or VX_METAL=0. device receives the name, or an empty string.
@@ -63,14 +78,17 @@ int32_t vxvector_gpu_probe_v1(char *device, size_t size);
 /*
  * Steps 4 and 5: one restart for the data path (vxvector_gpu_restart_fn in
  * vxvector_data_path.h). points holds the sample, and every row trains.
- * Restart r starts from the seeds of the CPU kernel's restart r. Writes
+ * Restart r starts from the seeds of the CPU kernel's restart r. With
+ * spherical, the CPU normalizes the centers in float64 after seeding and
+ * after each update, as the CPU kernel does. Writes
  * leaf_count * dims centers and rows labels of the final assignment. Returns
  * 0, 1 for a request it rejects or a sum overflow (as the CPU kernel), or 2
  * when the GPU fails.
  */
 int32_t vxvector_gpu_restart_v1(const float *points, int32_t rows, int32_t dims,
                                 int32_t leaf_count, int32_t iterations, int32_t metric,
-                                int32_t restart, float *centers, int32_t *labels);
+                                int32_t spherical, int32_t restart, float *centers,
+                                int32_t *labels);
 
 /*
  * Step 5: labels of the nearest of the k centers for each of the rows points,

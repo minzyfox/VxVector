@@ -125,15 +125,14 @@ struct vxvector_backend_choice {
  * it rejects the request, and 2 when the GPU fails after training starts. */
 struct vxvector_gpu_trainer {
     int32_t (*restart)(const float *points, int32_t rows, int32_t dims, int32_t leaf_count,
-                       int32_t iterations, int32_t metric, int32_t restart, float *centers,
-                       int32_t *labels);
+                       int32_t iterations, int32_t metric, int32_t spherical, int32_t restart,
+                       float *centers, int32_t *labels);
     int32_t (*assign)(const float *points, int32_t rows, int32_t dims, const float *centers,
                       int32_t k, int32_t metric, int32_t *labels);
 };
 
 /* Choose the backend after planning and before any row is read or any GPU
- * memory is allocated. The GPU must be ready, support the request (no
- * spherical normalization), fit the i32 kernel limits,
+ * memory is allocated. The GPU must be ready, fit the i32 kernel limits,
  * and fit memory_budget_bytes together with the CPU plan. In MODE_AUTO, any
  * of these failing selects the CPU, and choice gives the reason. In MODE_GPU
  * it returns VXVECTOR_DATA_GPU, and choice still gives the reason. */

@@ -106,8 +106,8 @@ int32_t vxvector_run_reason_v2(const struct vxvector_cpu_options *options,
                                struct vxvector_input_row *row, double (*clock)(void),
                                const struct vxvector_cpu_buffers *buffers, int32_t backend,
                                int32_t (*gpu_restart)(const float *, int32_t, int32_t, int32_t,
-                                                      int32_t, int32_t, int32_t, float *,
-                                                      int32_t *),
+                                                      int32_t, int32_t, int32_t, int32_t,
+                                                      float *, int32_t *),
                                int32_t (*gpu_assign)(const float *, int32_t, int32_t,
                                                      const float *, int32_t, int32_t,
                                                      int32_t *));
@@ -116,8 +116,8 @@ int32_t vxvector_select_backend_reason_v1(const struct vxvector_cpu_options *opt
                                           int32_t probe, struct vxvector_backend_choice *choice);
 /* Stand-ins that fill the GPU arguments on the CPU, which never calls them. */
 static int32_t no_gpu_restart(const float *p, int32_t r, int32_t d, int32_t k, int32_t i,
-                              int32_t m, int32_t s, float *c, int32_t *l) {
-    (void)p, (void)r, (void)d, (void)k, (void)i, (void)m, (void)s, (void)c, (void)l;
+                              int32_t m, int32_t h, int32_t s, float *c, int32_t *l) {
+    (void)p, (void)r, (void)d, (void)k, (void)i, (void)m, (void)h, (void)s, (void)c, (void)l;
     return 2;
 }
 static int32_t no_gpu_assign(const float *p, int32_t r, int32_t d, const float *c, int32_t k,

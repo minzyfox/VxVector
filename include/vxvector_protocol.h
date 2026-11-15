@@ -38,11 +38,16 @@ struct vxvector_worker_reply_v2 {
     uint64_t gpu_bytes;
     char device[64];
     char reason_text[128];
+    /* The GPU's share of clustering_seconds, from vxvector_gpu_timings in
+     * vxvector_gpu.h, and the GPU library's version. Zero and empty on the CPU. */
+    double gpu_allocation_seconds, gpu_copy_in_seconds, gpu_training_seconds,
+        gpu_copy_out_seconds;
+    char gpu_version[64];
 };
 
 _Static_assert(sizeof(struct vxvector_cpu_options) == 56, "CPU options ABI changed");
 _Static_assert(sizeof(struct vxvector_worker_request_v2) == 72, "Worker request v2 ABI changed");
-_Static_assert(sizeof(struct vxvector_worker_reply_v2) == 520, "Worker reply v2 ABI changed");
+_Static_assert(sizeof(struct vxvector_worker_reply_v2) == 616, "Worker reply v2 ABI changed");
 _Static_assert(sizeof(struct vxvector_worker_request) == 64, "Worker request ABI changed");
 _Static_assert(sizeof(struct vxvector_worker_reply) == 312, "Worker reply ABI changed");
 #endif

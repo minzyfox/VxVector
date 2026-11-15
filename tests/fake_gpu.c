@@ -25,8 +25,9 @@ static int failing(void) {
 
 int32_t vxvector_gpu_restart_v1(const float *points, int32_t rows, int32_t dims,
                                 int32_t leaf_count, int32_t iterations, int32_t metric,
-                                int32_t restart, float *centers, int32_t *labels) {
-    (void)points, (void)iterations, (void)metric;
+                                int32_t spherical, int32_t restart, float *centers,
+                                int32_t *labels) {
+    (void)points, (void)iterations, (void)metric, (void)spherical;
     if (failing())
         return 2;
     /* Restart FAKE_GPU_BEST gets centers of 0, the nearest to small samples. */
@@ -49,3 +50,12 @@ int32_t vxvector_gpu_assign_v1(const float *points, int32_t rows, int32_t dims,
         labels[r] = 0;
     return 0;
 }
+
+struct timings { double allocation, copy_in, training, copy_out; uint64_t calls; };
+static struct timings fake_timings;
+void vxvector_gpu_reset_timings_v1(void) { memset(&fake_timings, 0, sizeof fake_timings); }
+void vxvector_gpu_timings_v1(struct timings *out) {
+    fake_timings.training = 0.25;
+    *out = fake_timings;
+}
+const char *vxvector_gpu_version_v1(void) { return "Fake GPU 1"; }

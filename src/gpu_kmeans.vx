@@ -31,6 +31,17 @@
 import core::convert;
 import core::num;
 
+// Spherical centers are normalized in float64, as normalize in src/kmeans.vx
+// does, which the GPU cannot. A Vx function cannot read GPU memory, so C does
+// it: the caller passes vxvector_gpu_normalize_rows of src/gpu_l2.c as
+// normalize. An extern declaration of it would not compile, because vxc
+// resolves extern symbols when it emits the object. vx_metal_wait, of the Vx
+// runtime, resolves, and it waits for every launch, so the centers are
+// complete when C reads them.
+extern "C" {
+  fn vx_metal_wait() -> void;
+}
+
 // Whether value is finite. x - x is 0 for a finite x, and NaN for an infinity
 // or a NaN. f32::is_finite has no `ensures writes_only()`, so an `across`
 // loop cannot call it (see docs/step3_metal_l2.md).
@@ -467,10 +478,14 @@ pub fn vxvector_gpu_l2_run_v2(centers: &mut Tensor<f32, [?, ?], Memory::HBM>,
   counts: &mut Tensor<i32, [?], Memory::HBM>,
   overflow: &mut Tensor<i32, [?, ?], Memory::HBM>,
   samples: &Tensor<f32, [?, ?], Memory::HBM>,
-  n: i32, k: i32, dims: i32, iterations: i32, metric: i32, shift: i32,
-  launch_work: i64) -> void {
+  n: i32, k: i32, dims: i32, iterations: i32, metric: i32, spherical: i32, shift: i32,
+  launch_work: i64, normalize: fn(*mut f32 in Memory::HBM, i32, i32) -> void) -> void {
   let update_step = fit(launch_work, i64::from(k) * i64::from(dims), i64::from(n));
   vxvector_gpu_seed_v2(centers, samples, n, k, dims, shift);
+  if spherical != 0 {
+    unsafe { vx_metal_wait(); }
+    normalize(centers.as_mut_ptr(), k, dims);
+  }
   for iteration in 0..iterations {
     vxvector_gpu_assign_all_v1(labels, best, samples, centers, n, k, dims, metric, launch_work);
     vxvector_gpu_zero_v1(sums, counts, k, dims);
@@ -482,6 +497,10 @@ pub fn vxvector_gpu_l2_run_v2(centers: &mut Tensor<f32, [?, ?], Memory::HBM>,
       first_row = first_row + rows;
     }
     vxvector_gpu_finish_update_v1(centers, sums, counts, samples, n, k, dims, iteration);
+    if spherical != 0 {
+      unsafe { vx_metal_wait(); }
+    normalize(centers.as_mut_ptr(), k, dims);
+    }
   }
   vxvector_gpu_assign_all_v1(labels, best, samples, centers, n, k, dims, metric, launch_work);
   return;

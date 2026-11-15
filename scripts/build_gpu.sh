@@ -38,8 +38,19 @@ if ! "$compiler" --host default --machine "$machine" "$project_root/src/gpu_kmea
 fi
 "$compiler" --host default --machine "$machine" "$project_root/src/gpu_kmeans.vx" \
   --action emit-msl -o "$out/gpu_kmeans.metal" > /dev/null 2>&1 || true
-clang -std=c11 -O2 -Wall -Wextra -Werror -fPIC -I "$project_root/include" \
+# -ffp-contract=off: the float64 normalization must round as the CPU kernel's.
+clang -std=c11 -O2 -ffp-contract=off -Wall -Wextra -Werror -fPIC -I "$project_root/include" \
+  -DVXVECTOR_VX_REVISION="\"${revision:0:8}\"" \
   -c "$project_root/src/gpu_l2.c" -o "$out/gpu_l2.o"
+# The data cannot show a fused squared norm, which changes it by about 1e-16, so
+# check the instructions: no fused multiply-add in the normalization.
+# Count rather than grep -q: with pipefail, grep -q stopping early fails objdump.
+fused="$(objdump -d --disassemble-symbols=_vxvector_gpu_normalize_rows "$out/gpu_l2.o" |
+  grep -ciE '[[:space:]]fn?m(add|sub)[[:space:]]' || true)"
+if [[ "$fused" != 0 ]]; then
+  echo "vxvector_gpu_normalize_rows has a fused multiply-add; build with -ffp-contract=off." >&2
+  exit 1
+fi
 clang -O2 -Wall -Wextra -Werror -fPIC -fobjc-arc -c "$project_root/src/gpu_device.m" \
   -o "$out/gpu_device.o"
 clang -shared "$out/gpu_kmeans.o" "$out/gpu_l2.o" "$out/gpu_device.o" "$dispatch" \

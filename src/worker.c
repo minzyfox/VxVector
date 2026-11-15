@@ -51,9 +51,18 @@ static int32_t next_row(void *context, struct vxvector_input_row *row) {
 /* The optional GPU library. A CPU-only install has none, and the worker needs
  * no GPU library to load. VXVECTOR_GPU_LIBRARY names it; otherwise it is
  * next to the worker. */
+/* The timings of the GPU library, as in vxvector_gpu.h. */
+struct gpu_timings {
+    double allocation_seconds, copy_in_seconds, training_seconds, copy_out_seconds;
+    uint64_t calls;
+};
+
 struct gpu_library {
     int32_t (*probe)(char *device, size_t size);
     struct vxvector_gpu_trainer trainer;
+    void (*reset_timings)(void);
+    void (*timings)(struct gpu_timings *);
+    const char *(*version)(void);
 };
 
 static int32_t load_gpu(const char *worker, struct gpu_library *gpu, char *device, size_t size) {
@@ -71,7 +80,11 @@ static int32_t load_gpu(const char *worker, struct gpu_library *gpu, char *devic
     *(void **)&gpu->probe = dlsym(library, "vxvector_gpu_probe_v1");
     *(void **)&gpu->trainer.restart = dlsym(library, "vxvector_gpu_restart_v1");
     *(void **)&gpu->trainer.assign = dlsym(library, "vxvector_gpu_assign_v1");
-    if (!gpu->probe || !gpu->trainer.restart || !gpu->trainer.assign)
+    *(void **)&gpu->reset_timings = dlsym(library, "vxvector_gpu_reset_timings_v1");
+    *(void **)&gpu->timings = dlsym(library, "vxvector_gpu_timings_v1");
+    *(void **)&gpu->version = dlsym(library, "vxvector_gpu_version_v1");
+    if (!gpu->probe || !gpu->trainer.restart || !gpu->trainer.assign || !gpu->reset_timings ||
+        !gpu->timings || !gpu->version)
         return VXVECTOR_PROBE_NOT_INSTALLED;
     return gpu->probe(device, size) == 0 ? VXVECTOR_PROBE_READY : VXVECTOR_PROBE_UNAVAILABLE;
 }
@@ -140,6 +153,8 @@ int main(int argc, char **argv) {
         return fail(version, &reply, selected, error.message);
     if (choice.backend != VXVECTOR_BACKEND_GPU)
         reply.device[0] = '\0';
+    else
+        snprintf(reply.gpu_version, sizeof(reply.gpu_version), "%s", gpu.version());
 
     reply.base.dims = request.options.dims;
     reply.base.nodes = plan.node_count;
@@ -151,9 +166,19 @@ int main(int argc, char **argv) {
     if (!reader.values)
         return fail(version, &reply, VXVECTOR_DATA_MEMORY, "Could not allocate the worker input row");
     struct vxvector_cpu_result result;
+    if (choice.backend == VXVECTOR_BACKEND_GPU)
+        gpu.reset_timings();
     reply.base.status = vxvector_run_v2(&request.options, &choice, &gpu.trainer, next_row, &reader,
                                         &result, &error);
     free(reader.values);
+    if (choice.backend == VXVECTOR_BACKEND_GPU) {
+        struct gpu_timings t;
+        gpu.timings(&t);
+        reply.gpu_allocation_seconds = t.allocation_seconds;
+        reply.gpu_copy_in_seconds = t.copy_in_seconds;
+        reply.gpu_training_seconds = t.training_seconds;
+        reply.gpu_copy_out_seconds = t.copy_out_seconds;
+    }
     if (reply.base.status != 0)
         return fail(version, &reply, reply.base.status, error.message);
     reply.base.read_seconds = result.read_seconds;

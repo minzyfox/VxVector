@@ -18,7 +18,7 @@ import sys
 
 import numpy as np
 
-from test_data_path import Error, Next, Options, Reader, Result, options
+from test_data_path import Error, Next, Options, Plan, Reader, Result, options
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
 from sampler_reference import training_rows  # noqa: E402
@@ -47,7 +47,10 @@ class RequestV2(c.Structure):
 class ReplyV2(c.Structure):
     _fields_ = [("base", Reply), ("backend", c.c_int32), ("reason", c.c_int32),
                 ("gpu_bytes", c.c_uint64), ("device", c.c_char * 64),
-                ("reason_text", c.c_char * 128)]
+                ("reason_text", c.c_char * 128)] + [
+                (name, c.c_double) for name in ("gpu_allocation_seconds", "gpu_copy_in_seconds",
+                                                "gpu_training_seconds", "gpu_copy_out_seconds")] + [
+                ("gpu_version", c.c_char * 64)]
 
 
 def rows_payload(points):
@@ -119,6 +122,16 @@ class BackendSelectionTests(unittest.TestCase):
         self.assertEqual(run.result.returncode, 0)
         # The fake GPU's leaves, so the GPU trainer ran.
         self.assertTrue((run.nodes()[1:] == 7.0).all())
+        self.assertEqual(run.ready.gpu_version, b"Fake GPU 1")
+        self.assertEqual(run.done.gpu_training_seconds, 0.25)
+
+    def test_every_option_now_selects_the_gpu(self):
+        for overrides in (dict(metric=1), dict(metric=2), dict(restarts=3), dict(spherical=1),
+                          dict(root_count=2), dict(metric=2, spherical=1, restarts=2, root_count=2)):
+            with self.subTest(**overrides):
+                run = self.run_worker(AUTO, self.supported(**overrides), self.points())
+                self.assertEqual((run.ready.backend, run.ready.reason), (GPU_BACKEND, GPU_SELECTED))
+                self.assertEqual(run.done.base.status, 0, run.done.base.message)
 
     def test_gpu_leaves_get_cpu_roots_and_parents(self):
         run = self.run_worker(AUTO, self.supported(root_count=2), self.points())
@@ -152,6 +165,8 @@ class BackendSelectionTests(unittest.TestCase):
         self.assertEqual(run.ready.device, b"")
         self.assertEqual(run.ready.gpu_bytes, 0)
         self.assertEqual(run.done.base.status, 0)
+        self.assertEqual(run.done.gpu_training_seconds, 0.0)
+        self.assertEqual(run.ready.gpu_version, b"")
         self.assertFalse((run.nodes()[1:] == 7.0).any())
 
     def test_version_1_requests_still_train_on_the_cpu(self):
@@ -164,7 +179,6 @@ class BackendSelectionTests(unittest.TestCase):
         cases = [
             (dict(), dict(library="/nonexistent/libvxvector_gpu.dylib"), NOT_INSTALLED),
             (dict(), dict(env={"FAKE_GPU_PROBE": "unavailable"}), UNAVAILABLE),
-            (dict(spherical=1), dict(), SPHERICAL),
         ]
         for overrides, how, reason in cases:
             with self.subTest(reason=reason, overrides=overrides):
@@ -179,7 +193,6 @@ class BackendSelectionTests(unittest.TestCase):
         cases = [
             (dict(), dict(library="/nonexistent/libvxvector_gpu.dylib"), NOT_INSTALLED),
             (dict(), dict(env={"FAKE_GPU_PROBE": "unavailable"}), UNAVAILABLE),
-            (dict(spherical=1), dict(), SPHERICAL),
         ]
         for overrides, how, reason in cases:
             with self.subTest(reason=reason):
@@ -225,6 +238,38 @@ class BackendSelectionTests(unittest.TestCase):
                 self.assertEqual(run.output, b"")
                 self.assertNotEqual(run.result.returncode, 0)
 
+    def test_nonfinite_rows_are_rejected_before_gpu_training(self):
+        points = self.points()
+        points[5][1] = float("nan")
+        for mode in (AUTO, GPU):
+            with self.subTest(mode=mode):
+                run = self.run_worker(mode, self.supported(), points)
+                self.assertEqual(run.ready.backend, GPU_BACKEND)
+                self.assertEqual(run.done.base.status, 1)
+                self.assertIn(b"nonfinite", run.done.base.message)
+                self.assertEqual(run.output, b"")
+
+    def test_samples_too_large_for_the_gpu_kernels_select_the_cpu(self):
+        # n * dims must stay below 2^31. Selection needs only the options and
+        # the plan, so no rows are needed.
+        library = c.CDLL(os.path.join(os.path.dirname(WORKER), "libvxvector_kmeans.dylib"))
+
+        class Choice(c.Structure):
+            _fields_ = [("backend", c.c_int32), ("reason", c.c_int32), ("gpu_bytes", c.c_uint64)]
+
+        for dims, samples, reason in ((1024, 2 ** 21 - 1, GPU_SELECTED), (1024, 2 ** 21, SIZE)):
+            with self.subTest(samples=samples):
+                opts = options(row_count=samples, dims=dims, leaf_count=64, sampling_factor=2 ** 20,
+                               restarts=1, batch_size=1024, memory_budget_bytes=2 ** 62)
+                plan, error, choice = Plan(), Error(), Choice()
+                self.assertEqual(library.vxvector_plan_cpu_v1(c.byref(opts), c.byref(plan), c.byref(error)), 0,
+                                 error.message)
+                self.assertEqual(plan.sample_count, samples)
+                for mode, status in ((AUTO, 0), (GPU, 0 if reason == GPU_SELECTED else STATUS_GPU)):
+                    got = library.vxvector_select_backend_v1(c.byref(opts), c.byref(plan), mode, 0,
+                                                             c.byref(choice), c.byref(error))
+                    self.assertEqual((got, choice.reason), (status, reason))
+
     def test_invalid_mode_is_rejected(self):
         run = self.run_worker(9, self.supported())
         self.assertEqual(run.ready.base.status, 1)
@@ -250,20 +295,25 @@ class RealGpuTests(unittest.TestCase):
     def test_gpu_and_cpu_workers_agree(self):
         # The second case samples 512 of 3,000 rows, as the data path does. The
         # third has roots, which the CPU trains on the GPU's leaves.
-        for rows, dims, leaves, factor, roots, metric in (
-                (2000, 16, 8, 1000, 0, 0), (3000, 24, 16, 32, 0, 0), (4000, 12, 32, 64, 4, 0),
-                (3000, 24, 16, 32, 0, 1), (3000, 24, 16, 32, 0, 2), (4000, 12, 32, 64, 4, 2)):
+        for rows, dims, leaves, factor, roots, metric, spherical in (
+                (2000, 16, 8, 1000, 0, 0, 0), (3000, 24, 16, 32, 0, 0, 0), (4000, 12, 32, 64, 4, 0, 0),
+                (3000, 24, 16, 32, 0, 1, 0), (3000, 24, 16, 32, 0, 2, 0), (4000, 12, 32, 64, 4, 2, 0),
+                (3000, 24, 16, 32, 0, 0, 1), (3000, 24, 16, 32, 0, 1, 1), (4000, 12, 32, 64, 4, 2, 1)):
           for restarts in (1, 3):
-            with self.subTest(rows=rows, roots=roots, metric=metric, restarts=restarts):
+            with self.subTest(rows=rows, roots=roots, metric=metric, restarts=restarts,
+                              spherical=spherical):
                 points = blobs(rows, dims).tolist()
                 opts = options(row_count=rows, dims=dims, leaf_count=leaves, root_count=roots,
-                               metric=metric,
+                               metric=metric, spherical=spherical,
                                sampling_factor=factor, restarts=restarts, iterations=8,
                                batch_size=256, memory_budget_bytes=256 * 1024 * 1024)
                 gpu = self.run_real(AUTO, opts, points)
                 cpu = self.run_real(CPU, opts, points)
                 self.assertEqual(gpu.ready.backend, GPU_BACKEND, gpu.ready.reason_text)
                 self.assertTrue(gpu.ready.device)
+                self.assertTrue(gpu.ready.gpu_version.startswith(b"Metal, Vx "))
+                self.assertGreater(gpu.done.gpu_training_seconds, 0)
+                self.assertLessEqual(gpu.done.gpu_training_seconds, gpu.done.base.clustering_seconds)
                 self.assertEqual(gpu.done.base.status, 0, gpu.done.base.message)
                 self.assertEqual(cpu.done.base.status, 0, cpu.done.base.message)
                 self.assertEqual(gpu.done.base.samples, min(rows, leaves * factor))
@@ -280,7 +330,8 @@ class RealGpuTests(unittest.TestCase):
                 self.assertLessEqual(abs(relative), OBJECTIVE_TOLERANCE)
                 self.assertTrue(np.isfinite(gpu.nodes()).all())
                 print(f"near-tie divergence: rows={rows} metric={metric} restarts={restarts} "
-                      f"roots={roots} objective {relative:+.2e}", file=sys.stderr)
+                      f"roots={roots} spherical={spherical} objective {relative:+.2e}",
+                      file=sys.stderr)
 
     def test_data_path_keeps_the_assignments_of_the_best_restart(self):
         # vxvector_run_v2 directly, for the assignments, which the worker does

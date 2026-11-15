@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-14",
+  "platform": "macOS 27.2.1 arm64, Apple M2 Pro",
+  "vx_revision": "423a10dbbd91230df290494f9705a746dc444baf",
+  "compiler_version": "vxc 0.0.4 (423a10db)",
+  "compiler_sha256": "18889bbc6e837615e38f3ef6c76ceb50a78f909931645132e43670e83b61a6b3",
+  "cpu_opt_level": "-O3",
+  "sources": {
+    "src/kmeans.vx": "76ae1dffdfb316923844f3a30fd3a6f8cfbb94c39cc87daa291f34fc952908a6",
+    "src/data_path.c": "3a8ed7d920d384790b9a10a847b6836795c71a5aeaa6168fa6d974eb976a0858",
+    "src/worker.c": "81a677beff3c21944f5122abddc0381f750c5fedf4d0811933c15e9e2500c3fc",
+    "src/gpu_kmeans.vx": "890bd0762cc67b0c23aa8f1dafe85e490e1aee989db4fbc52a2cb60b136f1e96",
+    "src/gpu_l2.c": "84b98da58eefe2250618dd352563a1efc3d677267b01ab209364e3b033d816c6",
+    "src/gpu_device.m": "f5aaccefe1e964b733a6778b2d82c8e8d7bc6825781988ba37052997d9296a85",
+    "include/vxvector_data_path.h": "8b8bca4109f560b58309ca6e7934f25391b0066c0f07d1662ee8b06a54d983e9",
+    "include/vxvector_protocol.h": "4b1bfd5c396e4793ea190eed5ac6fb71bdd4ac5ee9b476f1d64d14f2549638a5",
+    "include/vxvector_gpu.h": "01f3b28c327021a82ce1ceeae22a4091e502f8eea33f7ed9daccfd963d23887c",
+    "tests/fake_gpu.c": "ff4489e0ce92ba218234112c3849fa23ca8dbd43bd5d53b6eaa4714fb2453f5b",
+    "tests/test_backend.py": "6e1d98aef4d40a78d64000525cb4a4866e9c342e44e12cd60a662a31fe7c6d5f",
+    "scripts/check_gpu_l2.py": "54e3007bce3275b18a4d7202226ec4994d3a9393de215d7aecbe0d6e4dfa244f",
+    "scripts/build_gpu.sh": "51dfd65931e631f823843d946ea3ab65747dc769b61826512368d90695e435a0"
+  },
+  "artifacts": {
+    "build/kmeans.o": "6368bc5f275cff6aed804d749938b07e92454c68373773f8f36e0117c9f1dfd0",
+    "build/libvxvector_kmeans.dylib": "f9317105fabdbe27bf3f248ff647a17e91c6afca594f41bab3c67f1a173e44a5",
+    "build/vxvector-worker": "dbec873270841dd6fa10945212f4db8428506dc25ad13b91f14b023dff97cedd",
+    "build/gpu/gpu_kmeans.o": "e85b8fa238401f20dce840deb725ae73def74900f18e14ca7c0d5afc40851376",
+    "build/gpu/gpu_l2.o": "911a7bdd450d2557545b917d3b6a5aa1e7eeacd517568bfe9725e2ec827ed3f9",
+    "build/gpu/libvxvector_gpu.dylib": "ea91135b8d9c5c185dabeffc9fd3ab08a8e7e9ff0e032911c906c133f35022d0",
+    "build/fake_gpu.dylib": "aea1baf23904fe681568898e93b2647ed8426f69bca05f0a118ccd418af80ff4"
+  },
+  "generated_msl_sha256": "d190b31c9be2475927218220db07326d2425165a8c7d9b5b9dff52fc8f1dfde7"
+}

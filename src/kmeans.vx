@@ -1053,7 +1053,7 @@ fn no_seconds() -> f64 {
 pub fn vxvector_run_reason_v2(options: *const CpuOptions, plan: *const CpuPlan,
 next: fn(*mut u8, *mut InputRow) -> i32, context: *mut u8, row: *mut InputRow,
 clock: fn() -> f64, buffers: *const CpuBuffers, backend: i32,
-gpu_restart: fn(*const f32, i32, i32, i32, i32, i32, i32, *mut f32, *mut i32) -> i32,
+gpu_restart: fn(*const f32, i32, i32, i32, i32, i32, i32, i32, *mut f32, *mut i32) -> i32,
 gpu_assign: fn(*const f32, i32, i32, *const f32, i32, i32, *mut i32) -> i32) -> i32 {
   let o: CpuOptions = unsafe { options[0] };
   let p: CpuPlan = unsafe { plan[0] };
@@ -1179,7 +1179,7 @@ gpu_assign: fn(*const f32, i32, i32, *const f32, i32, i32, *mut i32) -> i32) -> 
         centers = current;
       }
       status = gpu_restart(b.sample as *const f32, rows, dims, o.leaf_count,
-        o.iterations, o.metric, restart, centers, assignments);
+        o.iterations, o.metric, o.spherical, restart, centers, assignments);
       if status == 0 && o.restarts > 1 && rows > 0 && o.leaf_count > 0 {
         let objective = unsafe { labeled_objective(b.sample as *const f32, rows, dims,
           centers as *const f32, o.leaf_count, assignments as *const i32, &distance_metric) };
@@ -1369,9 +1369,6 @@ fn gpu_reason(o: &CpuOptions, p: &CpuPlan, probe: i32) -> i32 {
   }
   if probe != PROBE_READY {
     return REASON_GPU_UNAVAILABLE;
-  }
-  if o.spherical != 0 {
-    return REASON_GPU_SPHERICAL;
   }
   // The kernels index with i32: n * dims and k + iterations stay below 2^31.
   let n: u64 = p.sample_count;

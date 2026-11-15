@@ -1,0 +1,13 @@
+# Step 5: the worker on 100,000 SIFT-128 rows, auto against cpu. 256 leaves, sampling factor 128 (32,768 samples), 10 iterations, seed 42.
+defaults: L2, 1 restart: backend GPU (Apple M2 Pro, Metal, Vx 423a10db); GPU total 0.66s [clustering 0.284s = allocation 0.000 + copy in 0.001 + training 0.283 + copy out 0.000 + CPU work]; CPU -O3 total 7.22s (clustering 6.92s); speed-up 24.3x; same bytes
+cosine: backend GPU (Apple M2 Pro, Metal, Vx 423a10db); GPU total 0.71s [clustering 0.336s = allocation 0.000 + copy in 0.002 + training 0.334 + copy out 0.000 + CPU work]; CPU -O3 total 9.73s (clustering 9.42s); speed-up 28.1x; near-tie divergence, objective -1.08e-05
+spherical L2: backend GPU (Apple M2 Pro, Metal, Vx 423a10db); GPU total 0.64s [clustering 0.295s = allocation 0.000 + copy in 0.002 + training 0.293 + copy out 0.000 + CPU work]; CPU -O3 total 7.29s (clustering 6.99s); speed-up 23.7x; near-tie divergence, objective +4.93e-08
+3 restarts: backend GPU (Apple M2 Pro, Metal, Vx 423a10db); GPU total 2.25s [clustering 0.829s = allocation 0.001 + copy in 0.004 + training 0.818 + copy out 0.000 + CPU work]; CPU -O3 total 20.03s (clustering 19.73s); speed-up 23.8x; same bytes
+two-level, 16 roots: backend GPU (Apple M2 Pro, Metal, Vx 423a10db); GPU total 0.61s [clustering 0.279s = allocation 0.000 + copy in 0.001 + training 0.274 + copy out 0.000 + CPU work]; CPU -O3 total 7.25s (clustering 6.92s); speed-up 24.8x; same bytes
+cosine, spherical, 3 restarts, 16 roots: backend GPU (Apple M2 Pro, Metal, Vx 423a10db); GPU total 1.32s [clustering 0.996s = allocation 0.001 + copy in 0.004 + training 0.967 + copy out 0.000 + CPU work]; CPU -O3 total 26.95s (clustering 26.62s); speed-up 26.7x; near-tie divergence, objective -8.12e-06
+
+# Reruns of the 3-restart case. Its total of 2.25 s above did not repeat:
+restarts=3: total 1.20s read 0.31 sample 0.006 clustering 0.819 (GPU training 0.807)
+restarts=3: total 1.19s read 0.30 sample 0.006 clustering 0.823 (GPU training 0.810)
+restarts=1: total 0.65s read 0.31 sample 0.006 clustering 0.281 (GPU training 0.279)
+restarts=3: total 1.19s read 0.31 sample 0.005 clustering 0.811 (GPU training 0.799)
