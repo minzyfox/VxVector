@@ -1,6 +1,6 @@
 # VxVector active roadmap
 
-Updated November 11, 2026.
+Updated November 14, 2026.
 This is the single source of truth for next steps, priorities, and milestone completion.
 The [CPU correctness document](milestone_4_cpu_correctness.md) contains reference procedures and historical evidence.
 The [earlier roadmap and research assessments](roadmap_reference.md) preserve design ideas without defining additional execution gates.
@@ -32,7 +32,7 @@ The Linux worker, the extension, and the PostgreSQL image are rebuilt at `423a10
 The [pin update record](vx_pin_update_2026-11-14.md#linux-and-postgresql) covers the PostgreSQL suites, snapshot, synthetic recall, and real-data recall at that revision.
 Internal objective results remain evidence for their recorded source and compiler revisions.
 L2 training runs on the Apple GPU as a standalone library since Step 3. Nothing calls it yet.
-Every PostgreSQL user trains on the CPU today: the worker has no GPU path yet (Step 4).
+Every PostgreSQL user trains on the CPU today. The standalone worker selects the GPU since Step 4, but the extension still sends version 1 requests, which train on the CPU (Step 6).
 The Docker setup also cannot reach Metal, because it is a Linux VM. A native macOS PostgreSQL could, and the extension needs only POSIX process calls, but that setup is untested. See the VectorChord item in Step 6.
 The Step 3 kernels split their work into launches of at most about 2 ms, because macOS can stop a long launch and the Vx runtime then aborts. On SIFT-128 they train 24 to 28 times faster than the single-threaded `-O3` CPU kernel, with the same bits. See the [Step 3 record](step3_metal_l2.md#performance).
 
@@ -133,11 +133,17 @@ Do not add transfer overlap, multiple devices, or general tuning infrastructure 
 
 ## Step 4: automatic selection and CPU fallback
 
-- [ ] Add a backend capability/availability probe and implement the three selection modes above.
-- [ ] Test `auto` with GPU present, unavailable, and incompatible with a requested capability.
-- [ ] Test forced CPU and required GPU behavior without depending on the developer machine's device availability.
-- [ ] Report the selected backend and reason from the standalone worker interface.
-- [ ] Verify completion, cancellation, and resource cleanup on success and failure.
+Complete November 14, 2026, for the standalone worker on an Apple M2 Pro. See the [Step 4 record](step4_backend_selection.md).
+
+- [x] Add a backend capability/availability probe and implement the three selection modes above.
+  Selection is in Vx. The worker loads the GPU library with `dlopen`, so CPU-only installs need nothing new.
+- [x] Test `auto` with GPU present, unavailable, and incompatible with a requested capability.
+- [x] Test forced CPU and required GPU behavior without depending on the developer machine's device availability.
+  A fake GPU library stands in for Metal. Two more tests use the real library where it is present.
+- [x] Report the selected backend and reason from the standalone worker interface.
+  Worker protocol version 2. Version 1 requests still train on the CPU, so the extension is unchanged until Step 6.
+- [x] Verify completion, cancellation, and resource cleanup on success and failure.
+  A GPU failure after training starts is reported and not rerun on the CPU.
 
 Exit: the same training request runs on a supported GPU or selects CPU before training when GPU execution is unavailable.
 
@@ -206,6 +212,7 @@ Exit: reproducible end-to-end measurements support each performance claim, inclu
 - [Step 2 data path record](step2_data_path_vx_2026-11-11.md).
 - [Vx pin update to 423a10db](vx_pin_update_2026-11-14.md).
 - [Step 3 Metal L2 record](step3_metal_l2.md).
+- [Step 4 backend selection record](step4_backend_selection.md).
 - [November 8 Vx usage review](vx_usage_review_2026-11-08.md) and [Vx issue drafts](vx_issue_drafts_2026-11-08.md).
 
 These references supply procedures and evidence. They do not add prerequisites or override this sequence.

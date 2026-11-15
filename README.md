@@ -501,6 +501,12 @@ arch -arm64 build/correctness-venv/bin/python -B scripts/check_gpu_l2.py
 This covers one restart of L2 training, and nothing calls it from SQL yet.
 See the [Step 3 record](docs/step3_metal_l2.md) for the policy and the results.
 
+The native worker uses this library when it finds it next to the worker, or at
+`VXVECTOR_GPU_LIBRARY`. Worker protocol version 2 takes a mode (`auto`, `cpu`, or
+`gpu`) and reports the backend, the reason, and the device. With the library built,
+`scripts/check_cpu.sh` also runs the real-GPU worker tests. See the
+[Step 4 record](docs/step4_backend_selection.md).
+
 ## Library API
 
 [`include/vxvector_kmeans.h`](include/vxvector_kmeans.h) defines the C ABI.

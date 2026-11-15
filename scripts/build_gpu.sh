@@ -40,6 +40,9 @@ fi
   --action emit-msl -o "$out/gpu_kmeans.metal" > /dev/null 2>&1 || true
 clang -std=c11 -O2 -Wall -Wextra -Werror -fPIC -I "$project_root/include" \
   -c "$project_root/src/gpu_l2.c" -o "$out/gpu_l2.o"
-clang -shared "$out/gpu_kmeans.o" "$out/gpu_l2.o" "$dispatch" \
+clang -O2 -Wall -Wextra -Werror -fPIC -fobjc-arc -c "$project_root/src/gpu_device.m" \
+  -o "$out/gpu_device.o"
+clang -shared "$out/gpu_kmeans.o" "$out/gpu_l2.o" "$out/gpu_device.o" "$dispatch" \
+  -framework Metal -framework Foundation \
   -Wl,-rpath,"$(dirname "$dispatch")" -o "$out/libvxvector_gpu.dylib"
 printf '%s\n' "$dispatch" > "$out/dispatch-path.txt"

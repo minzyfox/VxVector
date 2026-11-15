@@ -1,0 +1,57 @@
+Warning[W1007] at /Users/gagan/dev/vextor/src/kmeans.vx:234:33: this cast only widens, so it cannot lose a value; `i64::from(..)` from `core::convert` says so
+Warning at /Users/gagan/dev/vextor/src/kmeans.vx:249:3: the prover ignores a condition here: it cannot reason about the `Div` operator
+Warning[W1007] at /Users/gagan/dev/vextor/src/kmeans.vx:552:29: this cast only widens, so it cannot lose a value; `i64::from(..)` from `core::convert` says so
+Warning[W1007] at /Users/gagan/dev/vextor/src/kmeans.vx:552:45: this cast only widens, so it cannot lose a value; `i64::from(..)` from `core::convert` says so
+Warning at /Users/gagan/dev/vextor/src/kmeans.vx:556:3: the prover ignores a condition here: it cannot reason about a cast whose integer source or destination type is not known
+Warning[W1007] at /Users/gagan/dev/vextor/src/kmeans.vx:652:45: this cast only widens, so it cannot lose a value; `i64::from(..)` from `core::convert` says so
+Warning[W1007] at /Users/gagan/dev/vextor/src/kmeans.vx:673:45: this cast only widens, so it cannot lose a value; `i64::from(..)` from `core::convert` says so
+Warning[W1007] at /Users/gagan/dev/vextor/src/kmeans.vx:1074:25: this cast only widens, so it cannot lose a value; `i64::from(..)` from `core::convert` says so
+Warning at /Users/gagan/dev/vextor/src/kmeans.vx:1223:3: the prover ignores a condition here: it cannot reason about the `Div` operator
+Warning[W1007] at /Users/gagan/dev/vextor/src/kmeans.vx:1268:17: this cast only widens, so it cannot lose a value; `i64::from(..)` from `core::convert` says so
+Warning[W1007] at /Users/gagan/dev/vextor/src/kmeans.vx:1268:41: this cast only widens, so it cannot lose a value; `i64::from(..)` from `core::convert` says so
+/Users/gagan/dev/vextor/src/kmeans.vx:479:14: a call in `unsafe` code trusts `!overlaps(destination, source, length)` of `copy_vector`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:511:18: a call in `unsafe` code trusts `!overlaps(destination, source, length)` of `copy_vector`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:653:30: a call in `unsafe` code trusts `!overlaps(output, current, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:653:30: a call in `unsafe` code trusts `initialized(data, rows as i64 * dims as i64)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:653:30: a call in `unsafe` code trusts `valid(chosen, samples)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:653:30: a call in `unsafe` code trusts `valid(counts, k)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:653:30: a call in `unsafe` code trusts `valid(current, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:653:30: a call in `unsafe` code trusts `valid(data, rows as i64 * dims as i64)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:653:30: a call in `unsafe` code trusts `valid(output, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:653:30: a call in `unsafe` code trusts `valid(sums, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:653:30: a call in `unsafe` code trusts `valid(table, slots)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:659:12: a call in `unsafe` code trusts `initialized(centers, k as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:659:12: a call in `unsafe` code trusts `initialized(data, rows as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:659:12: a call in `unsafe` code trusts `valid(centers, k as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:659:12: a call in `unsafe` code trusts `valid(data, rows as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:659:12: a call in `unsafe` code trusts `valid(out, rows)` of `assign_rows`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:674:30: a call in `unsafe` code trusts `!overlaps(output, current, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:674:30: a call in `unsafe` code trusts `initialized(data, rows as i64 * dims as i64)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:674:30: a call in `unsafe` code trusts `valid(chosen, samples)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:674:30: a call in `unsafe` code trusts `valid(counts, k)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:674:30: a call in `unsafe` code trusts `valid(current, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:674:30: a call in `unsafe` code trusts `valid(data, rows as i64 * dims as i64)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:674:30: a call in `unsafe` code trusts `valid(output, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:674:30: a call in `unsafe` code trusts `valid(sums, k as i64 * dims as i64)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:674:30: a call in `unsafe` code trusts `valid(table, slots)` of `train`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:685:12: a call in `unsafe` code trusts `initialized(centers, k as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:685:12: a call in `unsafe` code trusts `initialized(data, rows as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:685:12: a call in `unsafe` code trusts `valid(centers, k as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:685:12: a call in `unsafe` code trusts `valid(data, rows as i64 * dims as i64)` of `assign_rows`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:685:12: a call in `unsafe` code trusts `valid(out, rows)` of `assign_rows`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1088:12: a call in `unsafe` code trusts `valid(chosen, samples)` of `choose_rows`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1088:12: a call in `unsafe` code trusts `valid(table, slots)` of `choose_rows`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1089:12: a call in `unsafe` code trusts `initialized(chosen, count)` of `pair_positions`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1089:12: a call in `unsafe` code trusts `valid(chosen, count)` of `pair_positions`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1089:12: a call in `unsafe` code trusts `valid(positions, 2 * count)` of `pair_positions`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1090:12: a call in `unsafe` code trusts `initialized(positions, 2 * count)` of `sort_positions`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1090:12: a call in `unsafe` code trusts `valid(positions, 2 * count)` of `sort_positions`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1107:27: a call in `unsafe` code trusts `valid(batch, rows as i64 * dims as i64)` of `read_batch`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1107:27: a call in `unsafe` code trusts `valid(row, 1)` of `read_batch`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1113:25: a call in `unsafe` code trusts `initialized(batch, rows as i64 * dims as i64)` of `gather`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1113:25: a call in `unsafe` code trusts `initialized(positions, 2 * count)` of `gather`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1113:25: a call in `unsafe` code trusts `valid(batch, rows as i64 * dims as i64)` of `gather`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1113:25: a call in `unsafe` code trusts `valid(positions, 2 * count)` of `gather`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1113:25: a call in `unsafe` code trusts `valid(sample, count * dims as i64)` of `gather`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1168:16: a call in `unsafe` code trusts `initialized(values, length)` of `all_finite`, which the compiler cannot prove
+/Users/gagan/dev/vextor/src/kmeans.vx:1168:16: a call in `unsafe` code trusts `valid(values, length)` of `all_finite`, which the compiler cannot prove

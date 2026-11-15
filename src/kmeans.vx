@@ -753,6 +753,9 @@ const DATA_INVALID_ROW: i32 = 8;
 const DATA_NONFINITE_ROW: i32 = 9;
 const DATA_KMEANS_REJECTED: i32 = 10;
 const DATA_NONFINITE_CENTROID: i32 = 11;
+const DATA_INVALID_BACKEND: i32 = 12;
+const DATA_GPU_REQUIRED: i32 = 13;
+const DATA_GPU_FAILED: i32 = 14;
 
 // The largest allocation that size_t and ptrdiff_t both hold on the 64-bit
 // targets, and the total that marks a size beyond it.
@@ -1047,14 +1050,19 @@ fn no_seconds() -> f64 {
 // which wrote plan. buffers holds the capacities that plan states. row is
 // storage for the reader. timings receives read, sample and clustering seconds.
 // This is a C boundary. Its unsafe calls trust those capacities.
-pub fn vxvector_run_cpu_reason_v1(options: *const CpuOptions, plan: *const CpuPlan,
+pub fn vxvector_run_reason_v2(options: *const CpuOptions, plan: *const CpuPlan,
 next: fn(*mut u8, *mut InputRow) -> i32, context: *mut u8, row: *mut InputRow,
-clock: fn() -> f64, buffers: *const CpuBuffers) -> i32 {
+clock: fn() -> f64, buffers: *const CpuBuffers, backend: i32,
+gpu_train: fn(*const f32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32,
+  *mut f32, *mut i32, *mut i32, *mut f32, *mut f32, *mut i32, *mut i64, *mut i64) -> i32) -> i32 {
   let o: CpuOptions = unsafe { options[0] };
   let p: CpuPlan = unsafe { plan[0] };
   let b: CpuBuffers = unsafe { buffers[0] };
   if !valid_options(&o) {
     return DATA_INVALID_OPTION;
+  }
+  if backend != BACKEND_CPU && backend != BACKEND_GPU {
+    return DATA_INVALID_BACKEND;
   }
   // The plan states these. The checks give the prover the facts that the
   // calls below require.
@@ -1129,22 +1137,174 @@ clock: fn() -> f64, buffers: *const CpuBuffers) -> i32 {
 
   // The data path samples already, so the kernel takes every collected row in
   // order. The pairs and the table are free again and serve as its scratch.
+  // The GPU trainer takes the same arguments and gives the same layout. It
+  // returns 2 when the GPU fails after training starts, which is reported and
+  // not run again on the CPU.
   start = clock();
-  let status = vxvector_kmeans_v2(b.sample as *const f32, count as i32, o.dims,
-    o.root_count, o.leaf_count, o.sampling_factor, o.iterations, o.restarts,
-    o.metric, o.spherical, o.seed, b.nodes, b.parents, b.assignments,
-    b.current, b.sums, b.counts, b.positions, b.table);
+  let mut status = 0;
+  if backend == BACKEND_GPU {
+    status = gpu_train(b.sample as *const f32, count as i32, o.dims,
+      o.root_count, o.leaf_count, o.sampling_factor, o.iterations, o.restarts,
+      o.metric, o.spherical, o.seed, b.nodes, b.parents, b.assignments,
+      b.current, b.sums, b.counts, b.positions, b.table);
+  } else {
+    status = vxvector_kmeans_v2(b.sample as *const f32, count as i32, o.dims,
+      o.root_count, o.leaf_count, o.sampling_factor, o.iterations, o.restarts,
+      o.metric, o.spherical, o.seed, b.nodes, b.parents, b.assignments,
+      b.current, b.sums, b.counts, b.positions, b.table);
+  }
   let clustering_seconds = clock() - start;
   let timings: *mut f64 = b.timings;
   unsafe { timings[0] = read_seconds; }
   unsafe { timings[1] = sample_seconds; }
   unsafe { timings[2] = clustering_seconds; }
+  if status == 2 && backend == BACKEND_GPU {
+    return DATA_GPU_FAILED;
+  }
   if status != 0 {
     return DATA_KMEANS_REJECTED;
   }
   let node_values = (p.node_count as i64) * width;
   if !unsafe { all_finite(b.nodes as *const f32, node_values) } {
     return DATA_NONFINITE_CENTROID;
+  }
+  return DATA_OK;
+}
+
+// ---------------------------------------------------------------------------
+// Backend selection (Step 4 of docs/pg_vxvector.md). src/data_path.c keeps the
+// same lists.
+
+const MODE_AUTO: i32 = 0;
+const MODE_CPU: i32 = 1;
+const MODE_GPU: i32 = 2;
+
+// What the caller found when it looked for the GPU library and a device.
+const PROBE_READY: i32 = 0;
+const PROBE_NOT_INSTALLED: i32 = 1;
+const PROBE_UNAVAILABLE: i32 = 2;
+
+const BACKEND_CPU: i32 = 0;
+const BACKEND_GPU: i32 = 1;
+
+const REASON_CPU_REQUESTED: i32 = 0;
+const REASON_GPU_SELECTED: i32 = 1;
+const REASON_GPU_NOT_INSTALLED: i32 = 2;
+const REASON_GPU_UNAVAILABLE: i32 = 3;
+const REASON_GPU_METRIC: i32 = 4;
+const REASON_GPU_RESTARTS: i32 = 5;
+const REASON_GPU_SPHERICAL: i32 = 6;
+const REASON_GPU_ROOTS: i32 = 7;
+const REASON_GPU_SIZE: i32 = 8;
+const REASON_GPU_BUDGET: i32 = 9;
+
+// The page size of the GPU allocator on Apple silicon. vx_metal_alloc gives
+// each buffer whole pages.
+const GPU_PAGE: u64 = 16384u64;
+
+// The chosen backend, why, and the GPU memory it needs. This mirrors
+// struct vxvector_backend_choice in include/vxvector_data_path.h.
+struct BackendChoice {
+  backend: i32,
+  reason: i32,
+  gpu_bytes: u64,
+}
+
+// total plus one GPU buffer of count elements of width bytes, in whole pages.
+fn add_gpu_buffer(total: u64, count: u64, width: u64) -> u64
+requires width > 0
+{
+  let bytes = add_buffer(0u64, count, width);
+  if bytes == TOO_LARGE {
+    return TOO_LARGE;
+  }
+  // bytes is at most ALLOCATION_LIMIT, so rounding up cannot wrap.
+  let pages = (bytes + GPU_PAGE - 1u64) / GPU_PAGE;
+  return add_buffer(total, pages, GPU_PAGE);
+}
+
+// The GPU memory that vxvector_gpu_l2_v1 allocates for n samples of dims
+// values and k centers: samples, centers, sums and overflow flags, best
+// distances and labels, and counts.
+fn gpu_bytes(n: u64, k: u64, dims: u64) -> u64 {
+  let mut total = add_gpu_buffer(0u64, n * dims, 4u64);
+  if total == TOO_LARGE || dims > ALLOCATION_LIMIT / 4u64 || k > ALLOCATION_LIMIT / 4u64 / dims {
+    return TOO_LARGE;
+  }
+  let center_values = k * dims;
+  for buffer in 0..3 {
+    total = add_gpu_buffer(total, center_values, 4u64);
+  }
+  total = add_gpu_buffer(total, n, 4u64);
+  total = add_gpu_buffer(total, n, 4u64);
+  total = add_gpu_buffer(total, k, 4u64);
+  return total;
+}
+
+// REASON_GPU_SELECTED when the GPU can train this request, or why not.
+fn gpu_reason(o: &CpuOptions, p: &CpuPlan, probe: i32) -> i32 {
+  if probe == PROBE_NOT_INSTALLED {
+    return REASON_GPU_NOT_INSTALLED;
+  }
+  if probe != PROBE_READY {
+    return REASON_GPU_UNAVAILABLE;
+  }
+  if o.metric != 0 {
+    return REASON_GPU_METRIC;
+  }
+  if o.restarts != 1 {
+    return REASON_GPU_RESTARTS;
+  }
+  if o.spherical != 0 {
+    return REASON_GPU_SPHERICAL;
+  }
+  if o.root_count != 0 {
+    return REASON_GPU_ROOTS;
+  }
+  // The kernels index with i32: n * dims and k + iterations stay below 2^31.
+  let n: u64 = p.sample_count;
+  let dims: u64 = o.dims as u64;
+  if n > 2147483647u64 / dims ||
+  (o.leaf_count as i64) + (o.iterations as i64) >= 2147483647i64 {
+    return REASON_GPU_SIZE;
+  }
+  let gpu = gpu_bytes(n, o.leaf_count as u64, dims);
+  if gpu == TOO_LARGE || p.buffer_bytes > o.memory_budget_bytes ||
+  gpu > o.memory_budget_bytes - p.buffer_bytes {
+    return REASON_GPU_BUDGET;
+  }
+  return REASON_GPU_SELECTED;
+}
+
+// Chooses the backend before any row is read or any GPU memory is allocated.
+// options must pass vxvector_plan_cpu_reason_v1, which wrote plan. mode is
+// MODE_AUTO, MODE_CPU, or MODE_GPU, and probe says whether the caller found
+// the GPU library and a device. In MODE_GPU, a request that the GPU cannot
+// run returns DATA_GPU_REQUIRED, and choice still gives the reason.
+// This is a C boundary.
+pub fn vxvector_select_backend_reason_v1(options: *const CpuOptions, plan: *const CpuPlan,
+mode: i32, probe: i32, choice: *mut BackendChoice) -> i32 {
+  let o: CpuOptions = unsafe { options[0] };
+  let p: CpuPlan = unsafe { plan[0] };
+  if !valid_options(&o) {
+    return DATA_INVALID_OPTION;
+  }
+  if mode != MODE_AUTO && mode != MODE_CPU && mode != MODE_GPU {
+    return DATA_INVALID_BACKEND;
+  }
+  if mode == MODE_CPU {
+    unsafe { choice[0] = BackendChoice { backend: BACKEND_CPU, reason: REASON_CPU_REQUESTED, gpu_bytes: 0u64 }; }
+    return DATA_OK;
+  }
+  let reason = gpu_reason(&o, &p, probe);
+  if reason == REASON_GPU_SELECTED {
+    let bytes = gpu_bytes(p.sample_count, o.leaf_count as u64, o.dims as u64);
+    unsafe { choice[0] = BackendChoice { backend: BACKEND_GPU, reason: reason, gpu_bytes: bytes }; }
+    return DATA_OK;
+  }
+  unsafe { choice[0] = BackendChoice { backend: BACKEND_CPU, reason: reason, gpu_bytes: 0u64 }; }
+  if mode == MODE_GPU {
+    return DATA_GPU_REQUIRED;
   }
   return DATA_OK;
 }

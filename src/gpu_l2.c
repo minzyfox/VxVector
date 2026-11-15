@@ -80,3 +80,47 @@ int32_t vxvector_gpu_l2_v1(const float *samples, int32_t n, int32_t dims,
             vx_metal_free(buffers[i]);
     return status;
 }
+
+int vxvector_gpu_device_name(char *name, size_t size); /* src/gpu_device.m */
+
+int32_t vxvector_gpu_probe_v1(char *device, size_t size)
+{
+    if (device && size)
+        device[0] = '\0';
+    /* vx_metal_alloc fails without a device and when VX_METAL=0, the cases in
+     * which the runtime would run the kernels on the CPU. */
+    void *page = vx_metal_alloc(1);
+    if (!page)
+        return VXVECTOR_GPU_UNAVAILABLE;
+    vx_metal_free(page);
+    if (device && size)
+        vxvector_gpu_device_name(device, size);
+    return VXVECTOR_GPU_OK;
+}
+
+int32_t vxvector_gpu_kmeans_v1(const float *points, int32_t rows, int32_t dims,
+                               int32_t root_count, int32_t leaf_count,
+                               int32_t sampling_factor, int32_t iterations,
+                               int32_t restarts, int32_t metric, int32_t spherical,
+                               int32_t seed, float *nodes, int32_t *parents,
+                               int32_t *assignments, float *current, float *sums,
+                               int32_t *counts, int64_t *sample_rows,
+                               int64_t *sample_table)
+{
+    (void)sampling_factor, (void)seed, (void)current, (void)sums, (void)sample_rows,
+        (void)sample_table;
+    if (!points || !nodes || !parents || !assignments || !counts || root_count != 0 ||
+        restarts != 1 || metric != 0 || spherical != 0 || dims <= 0)
+        return 1;
+    int32_t status = vxvector_gpu_l2_v1(points, rows, dims, leaf_count, iterations, 0,
+                                        nodes + dims, assignments, counts);
+    if (status == VXVECTOR_GPU_UNAVAILABLE)
+        return 2;
+    if (status != VXVECTOR_GPU_OK)
+        return 1;
+    memset(nodes, 0, (size_t)dims * sizeof(float));
+    parents[0] = -1;
+    for (int32_t i = 1; i <= leaf_count; i++)
+        parents[i] = 0;
+    return 0;
+}

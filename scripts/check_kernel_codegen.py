@@ -22,7 +22,8 @@ def check_copy(llvm):
 
 # The functions that C calls. Their unsafe calls trust the capacities that the
 # headers require of the caller.
-BOUNDARIES = {'vxvector_kmeans_v2', 'vxvector_plan_cpu_reason_v1', 'vxvector_run_cpu_reason_v1'}
+BOUNDARIES = {'vxvector_kmeans_v2', 'vxvector_plan_cpu_reason_v1', 'vxvector_run_reason_v2',
+              'vxvector_select_backend_reason_v1'}
 
 # The only trusted clauses outside the C boundaries: two copies from data into
 # current. Vx's !overlaps takes one length for both buffers, so it cannot state

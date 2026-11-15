@@ -1,0 +1,37 @@
+{
+  "date": "2026-11-14",
+  "platform": "macOS 27.2.1 arm64, Apple M2 Pro",
+  "vx_revision": "423a10dbbd91230df290494f9705a746dc444baf",
+  "compiler_version": "vxc 0.0.4 (423a10db)",
+  "compiler_sha256": "18889bbc6e837615e38f3ef6c76ceb50a78f909931645132e43670e83b61a6b3",
+  "sources": {
+    "src/kmeans.vx": "c428c0991af2b26d99b8461da6e2df69acea1d0c1d1c96a27db298b5bb37e831",
+    "src/data_path.c": "c1e383783303c1fe76d77eeb0c528cad1d133cf53321f39675098151a752a8e6",
+    "src/worker.c": "83e72ab51a02444b6b0a958b1fe2b4d7f32f535658393314146500d4bcd0c79c",
+    "src/gpu_kmeans.vx": "506134c08e71fd314952d86dd5eb8377a754527b55a109bcdc97fa7cd525acf2",
+    "src/gpu_l2.c": "a07f5344c557343f1502beab00a96ba68f15bda2d89720fdf3d69dd920a37024",
+    "src/gpu_device.m": "f5aaccefe1e964b733a6778b2d82c8e8d7bc6825781988ba37052997d9296a85",
+    "include/vxvector_data_path.h": "6e70ba55212ea7f8dd2fcc3b73b00b4236da36a14ac4d082599970724ae396d3",
+    "include/vxvector_protocol.h": "2b6a4a683a99644a610336e0c5bd19fb3a9ea105f33e121fad32eb0530e9f970",
+    "include/vxvector_gpu.h": "a95db8fb2789f9a15e64d4dd5274256463203141ea8d9581750cd175fb43c7d2",
+    "tests/fake_gpu.c": "138e7e7787c6b0f6aeab010eb6dcf33dabff0c27a75305c0c6a4543b1d02d7df",
+    "tests/test_backend.py": "2370eee6b21f34b433cd74fa6ec4ab2ee074defd8c8a1fd386bbc37ff054ae58"
+  },
+  "artifacts": {
+    "build/kmeans.o": "2638d4b566197db173b78a25b64ba45c5c3159dd2f419006b8ff9bc604517696",
+    "build/libvxvector_kmeans.dylib": "7e735fc5394e76aa0360f3d9d7f10c453eee7b3b84e276f0d08ba96850ddedd5",
+    "build/vxvector-worker": "8bb70707b605b8e72ec4fe3d9fb0ad66c7262d83259c26be71e815e932db2f40",
+    "build/gpu/libvxvector_gpu.dylib": "3605c78bd29aa26f85dd3ccd8f5fe0289cf08cba43efa5a93a5751370960eeb0",
+    "build/fake_gpu.dylib": "29e1c9685ffeeb9b01254cf4b2a3f7ae3e3debe39c2a9dfdbcb3ec888e26d2df",
+    "build/linux/kmeans.o": "8a61e28314669bc42c767dab506ec7ba735df3a437f7bc067267a84a64fdef2d",
+    "build/linux/libpg_vxvector.so": "8bb1a11906a907baa3fb513cfeade68ffe7be01182681d756be0ca3c72d94a57"
+  },
+  "linux_build": {
+    "vx_revision": "423a10dbbd91230df290494f9705a746dc444baf",
+    "compiler_version": "vxc 0.0.4",
+    "compiler_sha256": "b4b5f467eeeb846b4765fb30389d9141d06d651cdc19cba06a8853bf778d52b0",
+    "kernel_sha256": "c428c0991af2b26d99b8461da6e2df69acea1d0c1d1c96a27db298b5bb37e831",
+    "object_sha256": "8a61e28314669bc42c767dab506ec7ba735df3a437f7bc067267a84a64fdef2d",
+    "platform": "Linux-6.10.14-linuxkit-x86_64-with-glibc2.39"
+  }
+}

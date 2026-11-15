@@ -14,7 +14,9 @@ enum vxvector_data_status {
     VXVECTOR_DATA_OVERFLOW = 3,
     VXVECTOR_DATA_MEMORY = 4,
     VXVECTOR_DATA_SOURCE = 5,
-    VXVECTOR_DATA_KMEANS = 6
+    VXVECTOR_DATA_KMEANS = 6,
+    /* Backend selection failed, or GPU training failed after it started. */
+    VXVECTOR_DATA_GPU = 7
 };
 
 enum vxvector_input_type { VXVECTOR_INPUT_VECTOR = 0 };
@@ -82,6 +84,74 @@ int32_t vxvector_run_cpu_v1(const struct vxvector_cpu_options *options,
                          struct vxvector_cpu_result *result,
                          struct vxvector_data_error *error);
 void vxvector_free_cpu_result_v1(struct vxvector_cpu_result *result);
+
+/* Backend selection (Step 4 of docs/pg_vxvector.md). */
+enum vxvector_backend_mode {
+    VXVECTOR_MODE_AUTO = 0, /* the GPU when it can run the request, else the CPU */
+    VXVECTOR_MODE_CPU = 1,  /* the CPU, even when a GPU is available */
+    VXVECTOR_MODE_GPU = 2   /* the GPU, or an error before any row is read */
+};
+
+/* What the caller found when it looked for the GPU library and a device. */
+enum vxvector_gpu_probe {
+    VXVECTOR_PROBE_READY = 0,
+    VXVECTOR_PROBE_NOT_INSTALLED = 1,
+    VXVECTOR_PROBE_UNAVAILABLE = 2
+};
+
+enum vxvector_backend { VXVECTOR_BACKEND_CPU = 0, VXVECTOR_BACKEND_GPU = 1 };
+
+enum vxvector_backend_reason {
+    VXVECTOR_REASON_CPU_REQUESTED = 0,
+    VXVECTOR_REASON_GPU_SELECTED = 1,
+    VXVECTOR_REASON_GPU_NOT_INSTALLED = 2,
+    VXVECTOR_REASON_GPU_UNAVAILABLE = 3,
+    VXVECTOR_REASON_GPU_METRIC = 4,
+    VXVECTOR_REASON_GPU_RESTARTS = 5,
+    VXVECTOR_REASON_GPU_SPHERICAL = 6,
+    VXVECTOR_REASON_GPU_ROOTS = 7,
+    VXVECTOR_REASON_GPU_SIZE = 8,
+    VXVECTOR_REASON_GPU_BUDGET = 9
+};
+
+struct vxvector_backend_choice {
+    int32_t backend, reason;
+    /* GPU memory that training will allocate, beyond plan.buffer_bytes. */
+    uint64_t gpu_bytes;
+};
+
+/* A trainer with the arguments of vxvector_kmeans_v2 in vxvector_kmeans.h.
+ * It returns 0 on success, 1 when it rejects the request, and 2 when the GPU
+ * fails after training starts. */
+typedef int32_t (*vxvector_train_fn)(const float *, int32_t, int32_t, int32_t, int32_t,
+                                     int32_t, int32_t, int32_t, int32_t, int32_t, int32_t,
+                                     float *, int32_t *, int32_t *, float *, float *,
+                                     int32_t *, int64_t *, int64_t *);
+
+/* Choose the backend after planning and before any row is read or any GPU
+ * memory is allocated. The GPU must be ready, support the request (L2, one
+ * restart, no spherical normalization, no roots), fit the i32 kernel limits,
+ * and fit memory_budget_bytes together with the CPU plan. In MODE_AUTO, any
+ * of these failing selects the CPU, and choice gives the reason. In MODE_GPU
+ * it returns VXVECTOR_DATA_GPU, and choice still gives the reason. */
+int32_t vxvector_select_backend_v1(const struct vxvector_cpu_options *options,
+                                   const struct vxvector_cpu_plan *plan, int32_t mode,
+                                   int32_t probe, struct vxvector_backend_choice *choice,
+                                   struct vxvector_data_error *error);
+
+/* A sentence that explains a reason code. */
+const char *vxvector_backend_reason_v1(int32_t reason);
+
+/* vxvector_run_cpu_v1 with the backend that vxvector_select_backend_v1 chose.
+ * gpu_train is required for the GPU and ignored for the CPU. The result has
+ * the same layout on both. A GPU failure after training starts returns
+ * VXVECTOR_DATA_GPU. The data path does not train again on the CPU. */
+int32_t vxvector_run_v2(const struct vxvector_cpu_options *options,
+                        const struct vxvector_backend_choice *choice,
+                        vxvector_train_fn gpu_train,
+                        vxvector_next_row_fn next, void *context,
+                        struct vxvector_cpu_result *result,
+                        struct vxvector_data_error *error);
 
 #ifdef __cplusplus
 }
