@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Builds build/gpu/libvxvector_gpu.dylib for Step 3: the Apple GPU kernels of
-# src/gpu_kmeans.vx and the C wrapper src/gpu_l2.c. macOS on Apple silicon only.
+# Builds build/gpu/libvxvector_gpu.dylib: the GPU kernels of src/gpu_kmeans.vx
+# for Apple GPUs, the C wrapper src/gpu_l2.c, and its Metal backend
+# src/gpu_backend_metal.m. macOS on Apple silicon only.
 set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -40,6 +41,7 @@ fi
   --action emit-msl -o "$out/gpu_kmeans.metal" > /dev/null 2>&1 || true
 # -ffp-contract=off: the float64 normalization must round as the CPU kernel's.
 clang -std=c11 -O2 -ffp-contract=off -Wall -Wextra -Werror -fPIC -I "$project_root/include" \
+  -I "$project_root/src" \
   -DVXVECTOR_VX_REVISION="\"${revision:0:8}\"" \
   -c "$project_root/src/gpu_l2.c" -o "$out/gpu_l2.o"
 # The data cannot show a fused squared norm, which changes it by about 1e-16, so
@@ -51,9 +53,9 @@ if [[ "$fused" != 0 ]]; then
   echo "vxvector_gpu_normalize_rows has a fused multiply-add; build with -ffp-contract=off." >&2
   exit 1
 fi
-clang -O2 -Wall -Wextra -Werror -fPIC -fobjc-arc -c "$project_root/src/gpu_device.m" \
-  -o "$out/gpu_device.o"
-clang -shared "$out/gpu_kmeans.o" "$out/gpu_l2.o" "$out/gpu_device.o" "$dispatch" \
+clang -O2 -Wall -Wextra -Werror -fPIC -fobjc-arc -I "$project_root/src" \
+  -c "$project_root/src/gpu_backend_metal.m" -o "$out/gpu_backend_metal.o"
+clang -shared "$out/gpu_kmeans.o" "$out/gpu_l2.o" "$out/gpu_backend_metal.o" "$dispatch" \
   -framework Metal -framework Foundation \
   -Wl,-rpath,"$(dirname "$dispatch")" -o "$out/libvxvector_gpu.dylib"
 ln -sf gpu/libvxvector_gpu.dylib "$project_root/build/libvxvector_gpu.dylib"

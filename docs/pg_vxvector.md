@@ -1,6 +1,6 @@
 # VxVector active roadmap
 
-Updated November 14, 2026.
+Updated November 15, 2026.
 This is the single source of truth for next steps, priorities, and milestone completion.
 The [CPU correctness document](milestone_4_cpu_correctness.md) contains reference procedures and historical evidence.
 The [earlier roadmap and research assessments](roadmap_reference.md) preserve design ideas without defining additional execution gates.
@@ -34,30 +34,17 @@ Internal objective results remain evidence for their recorded source and compile
 PostgreSQL sends protocol-v2 requests with `auto`, `cpu`, or `gpu` backend
 selection. Native macOS can select Metal when the GPU library is available;
 the Linux Docker image cannot use Metal and currently falls back to CPU.
-An NVIDIA trainer prototype and worker-ABI wrapper exist, but the CUDA wrapper
-is not yet built against the CUDA toolkit or run on NVIDIA hardware, and it is
-not part of the Linux PostgreSQL build or image.
+The NVIDIA GPU library builds from the same Vx kernels as Metal, but has not
+run on NVIDIA hardware, and it is not part of the Linux PostgreSQL build or image.
 The Step 3 kernels split their work into launches of at most about 2 ms, because macOS can stop a long launch and the Vx runtime then aborts. On SIFT-128 they train 24 to 28 times faster than the single-threaded `-O3` CPU kernel, with the same bits. See the [Step 3 record](step3_metal_l2.md#performance).
 
-The NVIDIA-oriented [GPU prototype](../src/gpu_lloyd.vx) is separate from the
-Metal backend. It now emits A100 PTX for separate assignment, update, and copy
-kernels, with a CUDA library wrapper implementing the worker's GPU ABI. The
-CUDA-driver smoke test in `scripts/test_gpu_lloyd_cuda.sh` checks restart and
-assignment callbacks on an NVIDIA host; it has not been run on hardware in
-this environment. The normal PostgreSQL build/image scripts do not build or
-install this library, so it is not yet available through SQL.
-The wrapper currently calls the CUDA Driver API directly. Vx itself already
-has host-side CUDA orchestration in its CUDA dispatch runtime
-(`../Vx/runtime/cuda_dispatch.cpp`): allocation, transfers, PTX image loading,
-and kernel launches. It remains to test whether the Vx trainer can use that
-runtime and export the worker callbacks, rather than maintaining a separate
-direct-driver launcher.
-The kernels launch blocks across rows or centers with one lane per block; their
-inner work remains serial. Distance calculations use f64 intermediates; seed
-selection, empty-cluster replacements, spherical normalization, and float32
-sum-overflow handling follow the CPU trainer. The CUDA wrapper has only been
-host-syntax-checked with CUDA API declarations, not compiled against the CUDA
-toolkit or executed on a GPU.
+NVIDIA GPUs now use the same Vx source as Metal, [gpu_kmeans.vx](../src/gpu_kmeans.vx), with the Vx CUDA runtime in place of a hand-written launcher.
+The kernels and the training loop are shared. Each GPU adds one small C file behind [gpu_backend.h](../src/gpu_backend.h): allocate, free, copy in, copy out, wait, and the device name.
+[gpu_backend_metal.m](../src/gpu_backend_metal.m) is the Apple one, and [gpu_backend_cuda.c](../src/gpu_backend_cuda.c) the NVIDIA one.
+The Metal library gives the same bits as before the split, for all 902 outputs of the GPU checks.
+The CUDA library, built by [build_gpu_cuda.sh](../scripts/build_gpu_cuda.sh), compiles and links with `-z defs` against the Vx CUDA runtime on Linux, but has not run on an NVIDIA GPU.
+Spherical centers are normalized on the host in float64, as on Metal, after a copy of the k centers.
+The earlier Driver API prototype ([gpu_cuda.cpp](../src/gpu_cuda.cpp), [gpu_lloyd.vx](../src/gpu_lloyd.vx)) stays, built by `build_gpu_lloyd_cuda.sh`, until the shared build passes on an A100.
 
 ## Backend selection contract
 
@@ -195,17 +182,22 @@ PostgreSQL and worker execution. The Linux Docker setup remains CPU-only.
 
 - [x] Choose the native macOS path for Apple GPU execution and keep the Linux CPU setup usable.
 - [x] Send protocol-v2 `auto` requests from SQL, expose `vxvector.backend_mode` (`auto`, `cpu`, `gpu`), and report the worker's backend, reason, device, and GPU timings.
-  The bridge and protocol are covered by CPU fallback SQL tests and simulated GPU worker tests; these do not validate native PostgreSQL on macOS.
-- [ ] Native macOS blocker: VectorChord 1.1.1 does not load in native PostgreSQL 17 on macOS 27.2.1.
-  It builds from source against Homebrew `postgresql@17`, but dyld rejects `vchord.dylib` with `mis-aligned LINKEDIT string pool`: its string table starts 4-byte aligned, at `stroff` 6771756.
-  pgvector 0.8.2 builds and installs fine. A small Rust library links aligned with the same `-bundle -bundle_loader` flags and `strip = "symbols"`, so the cause is specific to VectorChord's link, probably its fat-LTO release profile with ld-27106. Re-stripping does not fix it.
-  VectorChord runs its macOS CI only on request, on macOS 15, and no upstream issue mentions this error.
-  Next: try its `dev` or `prof` profile or `lto = "off"`, then report upstream. This blocks only the native macOS path, not Steps 4 and 5.
-- [ ] Resolve the native VectorChord loading blocker and validate PostgreSQL extension loading on macOS.
-- [ ] Exercise native SQL-to-sampling-to-GPU-training-to-centroid-table-to-VectorChord-index execution.
-- [ ] Recheck exact-scan ground truth, held-out recall, and objective quality using the existing declared gates.
-- [ ] Test `auto`, forced CPU, required GPU, worker failure, timeout, cancellation, and transaction rollback through native macOS PostgreSQL.
-- [ ] Verify unsupported or missing GPU capability selects CPU without requiring application SQL changes in default mode.
+  The bridge and protocol are covered by CPU fallback SQL tests and simulated GPU worker tests; native PostgreSQL on macOS is validated in the [Step 6 record](step6_native_macos_2026-11-15.md).
+Complete November 15, 2026, on native macOS 27.2.1 with an Apple M2 Pro, except the instrumented objective comparison. See the [Step 6 record](step6_native_macos_2026-11-15.md).
+
+- [x] Resolve the native VectorChord loading blocker and validate PostgreSQL extension loading on macOS.
+  dyld rejected stripped bundles on macOS 27.2.1 (`mis-aligned LINKEDIT string pool`). The strip step causes it, not LTO.
+  Build VectorChord with `CARGO_PROFILE_RELEASE_STRIP=none`. [build_macos_extension.sh](../scripts/build_macos_extension.sh) now sets `CARGO_PROFILE_DEV_STRIP=none` for `pg_vxvector`.
+- [x] Exercise native SQL-to-sampling-to-GPU-training-to-centroid-table-to-VectorChord-index execution.
+  The README walkthrough selects the GPU in `auto` mode and is served by an index scan.
+  Over a socketpair, the worker sometimes missed the backend's `shutdown(SHUT_WR)` and hung until the timeout, about one call in seventy, apparently a lost wakeup in the macOS kernel. The worker now polls before its final read, and a regression test covers it.
+- [x] Recheck exact-scan ground truth and held-out recall using the existing declared gates.
+  The synthetic gate and the SIFT-128 and GloVe-25 comparison against VectorChord's trainer pass, with VxVector training on the GPU.
+- [ ] Recheck objective quality with the instrumented VectorChord build (`check_real_recall.py --capture-objectives`). Not run natively.
+- [x] Test `auto`, forced CPU, required GPU, worker failure, timeout, cancellation, and transaction rollback through native macOS PostgreSQL.
+  `cpu`, `gpu`, and `auto` give identical centroids. Each failure leaves no outputs, and the session keeps working.
+- [x] Verify unsupported or missing GPU capability selects CPU without requiring application SQL changes in default mode.
+- [ ] Report the strip alignment issue to VectorChord and the socket wakeup issue to Apple.
 
 Exit: the PostgreSQL workflow uses the GPU when supported and CPU otherwise, with observable selection and validated index quality.
 
@@ -220,7 +212,9 @@ Exit: the PostgreSQL workflow uses the GPU when supported and CPU otherwise, wit
 - [ ] Add completion-safe overlap only with device timelines and simultaneous-memory accounting.
 - [ ] Develop CPU SIMD as fallback optimization independently of GPU availability.
 - [ ] Add NVIDIA execution and CUDA integration after the Apple path is validated.
-- [ ] Check whether the NVIDIA worker callbacks can be implemented in Vx using its existing host-side CUDA dispatch runtime, rather than the prototype's direct CUDA Driver API wrapper. Verify exported C ABI, runtime linkage, and recoverable worker error behavior on Linux.
+- [x] Check whether the NVIDIA worker callbacks can be implemented in Vx using its existing host-side CUDA dispatch runtime, rather than the prototype's direct CUDA Driver API wrapper. Verify exported C ABI, runtime linkage, and recoverable worker error behavior on Linux.
+  Done November 15, 2026, without a GPU. [gpu_kmeans.vx](../src/gpu_kmeans.vx) builds for the A100 and links with the Vx CUDA runtime, which `vxc` builds only where the CUDA toolkit is installed. On Linux without a GPU, the library exports every worker symbol, probes as unavailable, and reports a failed restart as status 2.
+- [ ] Run the shared CUDA library on an A100: `check_gpu_l2.py`'s CPU comparison and near-tie tolerance, every metric, and spherical centers. Confirm that the Vx runtime runs launches in order, and that a runtime abort reaches SQL as a failed GPU. Then remove the Driver API prototype.
 - [ ] Compare against cuVS only on supported NVIDIA hardware with matched semantics and timing boundaries.
 
 Exit: reproducible end-to-end measurements support each performance claim, including cases where CPU is faster.
@@ -241,6 +235,7 @@ Exit: reproducible end-to-end measurements support each performance claim, inclu
 - [Step 4 backend selection record](step4_backend_selection.md).
 - [CPU kernel at -O3](cpu_o3_2026-11-14.md).
 - [Step 5 GPU options record](step5_gpu_options.md).
+- [Step 6 native macOS record](step6_native_macos_2026-11-15.md).
 - [November 8 Vx usage review](vx_usage_review_2026-11-08.md) and [Vx issue drafts](vx_issue_drafts_2026-11-08.md).
 
 These references supply procedures and evidence. They do not add prerequisites or override this sequence.

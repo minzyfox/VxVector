@@ -2,6 +2,7 @@
 
 #include <dlfcn.h>
 #include <errno.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,11 +33,33 @@ static int transfer(int fd, void *buffer, size_t bytes, int writing) {
 struct row_reader {
     uint32_t dims;
     float *values;
+    uint64_t remaining;
 };
+
+/* Waits until stdin is readable or at end of input. On macOS 27.2.1, a read
+ * that blocks on an AF_UNIX socket after this process has written to it can
+ * miss the wakeup from the peer's shutdown(SHUT_WR), and then sleeps until the
+ * peer closes the socket. Each poll checks the socket state again, so a
+ * missed wakeup costs at most one timeout. */
+static int wait_readable(int fd) {
+    for (;;) {
+        struct pollfd descriptor = {fd, POLLIN, 0};
+        int ready = poll(&descriptor, 1, 100);
+        if (ready > 0)
+            return 1;
+        if (ready < 0 && errno != EINTR)
+            return -1;
+    }
+}
 
 static int32_t next_row(void *context, struct vxvector_input_row *row) {
     struct row_reader *reader = context;
     uint32_t dims;
+    /* After the expected rows, the next read finds the end of input, or a
+     * surplus row, which the data path rejects. Only that read waits for the
+     * shutdown, so only it needs the guard. */
+    if (reader->remaining == 0 && wait_readable(STDIN_FILENO) != 1)
+        return -1;
     int status = transfer(STDIN_FILENO, &dims, sizeof(dims), 0);
     if (status != 1)
         return status;
@@ -45,6 +68,8 @@ static int32_t next_row(void *context, struct vxvector_input_row *row) {
     if (transfer(STDIN_FILENO, reader->values, (size_t)dims * sizeof(float), 0) != 1)
         return -1;
     *row = (struct vxvector_input_row){reader->values, dims, VXVECTOR_INPUT_VECTOR};
+    if (reader->remaining > 0)
+        --reader->remaining;
     return 1;
 }
 
@@ -162,7 +187,8 @@ int main(int argc, char **argv) {
     reply.base.buffer_bytes = plan.buffer_bytes + row_bytes + choice.gpu_bytes;
     if (send_reply(version, &reply) != 1)
         return 1;
-    struct row_reader reader = {(uint32_t)request.options.dims, malloc((size_t)row_bytes)};
+    struct row_reader reader = {(uint32_t)request.options.dims, malloc((size_t)row_bytes),
+                                (uint64_t)request.options.row_count};
     if (!reader.values)
         return fail(version, &reply, VXVECTOR_DATA_MEMORY, "Could not allocate the worker input row");
     struct vxvector_cpu_result result;

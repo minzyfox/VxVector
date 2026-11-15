@@ -2,6 +2,7 @@
 
 import ctypes as c
 import os
+import socket
 import struct
 import subprocess
 import unittest
@@ -62,6 +63,50 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(nodes[:2], (0, 0))
         self.assertEqual(sorted((nodes[2:4], nodes[4:6])), [(0, 0.5), (10, 10.5)])
         self.assertEqual(struct.unpack("=3i", result.stdout[2 * size + 24:]), (-1, 0, 0))
+
+    def test_end_of_rows_is_seen_over_a_socket_after_shutdown(self):
+        # pg_vxvector talks to the worker over a socketpair: it reads the plan
+        # reply, sends each row as two writes, then shuts down its write side.
+        # On macOS 27.2.1 the worker's final blocking read could miss that
+        # shutdown in about one run in a hundred and sleep until the backend timed
+        # out. 300 runs catch that about 95 percent of the time.
+        rows = 1000
+        request = bytes(Request(0x31524B5758544556,
+                                options(row_count=rows, dims=3, leaf_count=4, sampling_factor=40)))
+        size = c.sizeof(Reply)
+        for run in range(300):
+            parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+            worker = subprocess.Popen([WORKER], stdin=child, stdout=child, stderr=subprocess.DEVNULL)
+            child.close()
+            try:
+                parent.settimeout(5)
+                parent.sendall(request)
+                ready = Reply.from_buffer_copy(self.receive(parent, size))
+                self.assertEqual(ready.status, 0, ready.message)
+                for i in range(rows):
+                    parent.sendall(struct.pack("=I", 3))
+                    parent.sendall(struct.pack("=3f", i % 4 * 10, i % 7, i % 11))
+                parent.shutdown(socket.SHUT_WR)
+                try:
+                    reply = Reply.from_buffer_copy(self.receive(parent, size))
+                except socket.timeout:
+                    self.fail(f"run {run}: the worker did not see the end of input")
+                self.assertEqual(reply.status, 0, reply.message)
+            finally:
+                parent.close()
+                if worker.poll() is None:
+                    worker.kill()
+                worker.wait()
+
+    @staticmethod
+    def receive(connection, size):
+        data = b""
+        while len(data) < size:
+            chunk = connection.recv(size - len(data))
+            if not chunk:
+                raise EOFError("the worker closed the connection")
+            data += chunk
+        return data
 
     def test_invalid_magic_and_short_request_are_rejected(self):
         for payload in (b"bad", bytes(Request(0, options()))):

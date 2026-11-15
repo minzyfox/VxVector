@@ -17,7 +17,7 @@ enum vxvector_gpu_status {
     VXVECTOR_GPU_UNAVAILABLE = 3
 };
 
-/* The direct Metal k-means API. */
+/* The direct GPU k-means API, for Metal and CUDA builds alike. */
 /*
  * Step 3: one restart of L2 Lloyd's algorithm on the Apple GPU, macOS only.
  *
@@ -31,9 +31,9 @@ enum vxvector_gpu_status {
  * sizes of the last update. All buffers are caller-owned. The samples are
  * copied once into GPU memory, which stays resident for every iteration.
  *
- * launch_work bounds the multiply-adds of each GPU launch, 0 for the default
- * of 2^26. macOS can stop a long launch (docs/step3_metal_l2.md), so the work
- * is split into short launches. The split does not change the result.
+ * launch_work bounds the multiply-adds of each GPU launch, 0 for the default:
+ * 2^26 on Metal, because macOS can stop a long launch (docs/step3_metal_l2.md),
+ * and no split on CUDA. The split does not change the result.
  *
  * Requires 0 < k <= n, dims > 0, iterations > 0, launch_work >= 0,
  * n * dims < 2^31 and k + iterations < 2^31.

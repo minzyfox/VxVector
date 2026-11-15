@@ -40,5 +40,9 @@ export SDKROOT="$sdk"
 export LIBCLANG_PATH="$clang_library"
 export BINDGEN_EXTRA_CLANG_ARGS="${BINDGEN_EXTRA_CLANG_ARGS:+$BINDGEN_EXTRA_CLANG_ARGS }-isysroot $sdk"
 export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-arg=-undefined -C link-arg=dynamic_lookup"
+# Cargo strips debug info by default when the profile has none. On macOS 27.2.1
+# the stripped bundle's string table is only 4-byte aligned, and dyld then
+# refuses to load it ("mis-aligned LINKEDIT string pool").
+export CARGO_PROFILE_DEV_STRIP=none
 
 cargo build --locked --manifest-path "$project_root/pg_vxvector/Cargo.toml"

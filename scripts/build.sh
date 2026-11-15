@@ -66,6 +66,19 @@ mkdir -p "$project_root/build"
     --revision "$revision" --opt-level 3 --output "$project_root/build/vx-build-info.json"
 
   if [[ "${VX_CHECK_GPU:-0}" == "1" ]]; then
+    # The shared GPU source must compile for NVIDIA as well as for Metal, with
+    # every kernel in the PTX and in the launch manifest. No GPU is needed.
+    "$vx_root/target/$profile/vxc" --machine "$vx_root/fleet/a100-40.vx" \
+      "$project_root/src/gpu_kmeans.vx" --action emit-ptx \
+      -o "$project_root/build/gpu_kmeans.ptx"
+    for kernel in vxvector_gpu_seed_v2 vxvector_gpu_assign_v2 vxvector_gpu_assign_angular_v1 \
+      vxvector_gpu_zero_v1 vxvector_gpu_accumulate_v1 vxvector_gpu_finish_update_v1; do
+      if ! grep -Fq ".visible .entry $kernel(" "$project_root/build/gpu_kmeans.ptx" \
+        || ! grep -Fq "\"name\": \"$kernel\"" "$project_root/build/gpu_kmeans.json"; then
+        echo "The A100 PTX or launch manifest of src/gpu_kmeans.vx is missing kernel $kernel." >&2
+        exit 1
+      fi
+    done
     "$vx_root/target/$profile/vxc" --machine "$vx_root/fleet/a100-40.vx" \
       "$project_root/src/gpu_lloyd.vx" --action emit-llvm \
       > "$project_root/build/gpu_lloyd.mlir"

@@ -17,12 +17,12 @@ production-scale recall and performance still need validation.
 
 | Capability | Status |
 | --- | --- |
-| Training from SQL, then building a VectorChord index | Works on the **CPU** in the Docker PostgreSQL image below. Native macOS SQL now requests automatic backend selection; the full stack still needs end-to-end validation |
-| Training on an Apple GPU (Metal) | Works in the standalone worker, for every option: L2, inner product, cosine, restarts, spherical centroids, and two-level trees. Native PostgreSQL now uses the same worker selection path |
-| Automatic GPU or CPU selection | In the standalone worker (protocol version 2): `auto`, `cpu`, or `gpu`, with the reason reported |
-| PostgreSQL using the GPU | The extension sends protocol version 2 in `auto` mode. On native macOS it can select Metal; Linux Docker currently falls back to CPU. Full native SQL-to-index validation remains |
-| Installing into your own PostgreSQL | Native macOS extension loading is **untested**. VectorChord 1.1.1 currently fails to load on the tested macOS setup; see [native PostgreSQL setup](#install-into-an-existing-postgresql-untested) |
-| NVIDIA GPUs | A worker-compatible CUDA trainer prototype exists, but CUDA toolkit compilation, NVIDIA execution, and SQL integration remain unvalidated |
+| Training from SQL, then building a VectorChord index | Works on the **CPU** in the Docker PostgreSQL image below, and on the **Apple GPU** in native macOS PostgreSQL |
+| Training on an Apple GPU (Metal) | Works in the standalone worker, for every option: L2, inner product, cosine, restarts, spherical centroids, and two-level trees. Native PostgreSQL uses the same worker selection path |
+| Automatic GPU or CPU selection | `auto`, `cpu`, or `gpu`, in the standalone worker and from SQL through `vxvector.backend_mode`, with the reason reported |
+| PostgreSQL using the GPU | Validated on native macOS 27.2.1 with an Apple M2 Pro: SQL to Metal training to a VectorChord index, failure handling, and the recall gates. Linux Docker falls back to the CPU. See the [Step 6 record](docs/step6_native_macos_2026-11-15.md) |
+| Installing into your own PostgreSQL | Validated on one native macOS setup with Homebrew PostgreSQL 17. VectorChord must be built without stripping; see [native PostgreSQL setup](#install-into-an-existing-postgresql) |
+| NVIDIA GPUs | Built from the same Vx kernels as Metal (`scripts/build_gpu_cuda.sh`). It compiles and links on Linux, but has not run on an NVIDIA GPU and is not in the PostgreSQL image; see [Library API](#library-api) |
 
 ## Choose the PostgreSQL deployment
 
@@ -33,9 +33,9 @@ the Mac's Metal GPU; `auto` selects CPU there.
 
 To use an Apple GPU from SQL, PostgreSQL and the worker must both run natively on
 macOS, with the Metal library beside the worker. Follow
-[Install into an existing PostgreSQL](#install-into-an-existing-postgresql-untested)
-instead. That native path is not yet end-to-end validated, and the known native
-VectorChord loading blocker must be resolved first.
+[Install into an existing PostgreSQL](#install-into-an-existing-postgresql)
+instead. That path is validated on one machine; see the
+[Step 6 record](docs/step6_native_macos_2026-11-15.md).
 
 GPU results match the CPU bit for bit for L2 and the inner product in every test. Cosine,
 and spherical centroids on some inputs, can differ at float32 near-ties within a
@@ -77,16 +77,12 @@ VxVector to live:
 ```sh
 git clone https://github.com/minzyfox/vextor.git
 cd vextor
-git checkout step1-baseline-and-roadmap
 git clone https://github.com/minzyfox/Vx.git ../Vx
 export VX_ROOT="$(cd ../Vx && pwd)"
 git -C "$VX_ROOT" fetch origin "$(cat vx-revision.txt)"
 git -C "$VX_ROOT" checkout --detach "$(cat vx-revision.txt)"
 cp .env.example .env
 ```
-
-The work described here is on the `step1-baseline-and-roadmap` branch until it is
-merged into `main`. After the merge, skip the `git checkout` line.
 
 Edit `.env` and set `VXVECTOR_POSTGRES_PASSWORD` to a local development password.
 The default port is `15432`. Keep an existing `.env` when reusing a database volume.
@@ -356,15 +352,25 @@ and explicit SIMD and threading remain future work.
 See [the Vx main update](docs/vx_main_update_2026-11-04.md) for rationale and validation.
 See the [active roadmap](docs/pg_vxvector.md) for PostgreSQL GPU integration and the remaining work.
 
-## Install into an existing PostgreSQL (untested)
+## Install into an existing PostgreSQL
 
-The native macOS path has not been validated end to end. In particular, VectorChord
-1.1.1 currently fails to load on the tested macOS 27 setup (see Step 6 in the
-[roadmap](docs/pg_vxvector.md)). The following builds the VxVector pieces against a
-native PostgreSQL installation; it does not resolve that VectorChord blocker.
+This path is validated on macOS 27.2.1 with an Apple M2 Pro and Homebrew
+`postgresql@17`; see the [Step 6 record](docs/step6_native_macos_2026-11-15.md).
+On Apple Silicon, run the builds as arm64. Prefix them with `arch -arm64` if your
+terminal runs under Rosetta.
 
 You need PostgreSQL 17 with its server headers, pgvector, and VectorChord. The image
 uses pgvector 0.8.2 and VectorChord 1.1.1, with `shared_preload_libraries = 'vchord'`.
+
+On macOS 27.2.1, dyld refuses stripped extension bundles with `mis-aligned LINKEDIT
+string pool`, so build VectorChord 1.1.1 from source with stripping disabled:
+
+```sh
+cd VectorChord-1.1.1
+PG_CONFIG="$(command -v pg_config)" CARGO_PROFILE_RELEASE_STRIP=none \
+  cargo run -p xtask -- build
+make install
+```
 
 1. Build the native Vx CPU library and worker with `./scripts/build.sh`, then build
    the Metal library with `arch -arm64 ./scripts/build_gpu.sh`. The GPU build places
@@ -657,14 +663,15 @@ batch size, and optional buffer budget in bytes (default 64 MiB).
 The reported budget covers adapter buffers. It excludes caller-owned source
 storage, allocator overhead, and Vx runtime memory.
 
-The Apple GPU kernels are in `src/gpu_kmeans.vx`. `src/gpu_lloyd.vx` is a
-separate NVIDIA prototype that accepts device-resident samples and initialized
-centroids. `VX_CHECK_GPU=1 ./scripts/build.sh` emits A100 PTX and its launch
-manifest without requiring NVIDIA hardware. Assignment and update launch
-blocks across rows and centers, respectively, but each block uses one lane and
-scans its work serially. On a Linux NVIDIA host with an Ampere-or-newer GPU
-(compute capability 8.0+) and the CUDA toolkit and driver, run
-`CUDA_HOME=/usr/local/cuda ./scripts/test_gpu_lloyd_cuda.sh` to build the
-worker-compatible CUDA library and check restart and assignment results. The
-library is not yet wired into the PostgreSQL image/build flow. The kernels are
-not a performance implementation.
+The GPU kernels and training loop are in `src/gpu_kmeans.vx`, for Apple and
+NVIDIA GPUs alike. `src/gpu_l2.c` calls them, and one small backend file per GPU
+(`src/gpu_backend_metal.m`, `src/gpu_backend_cuda.c`) supplies memory, copies,
+and waits. `VX_CHECK_GPU=1 ./scripts/build.sh` compiles the kernels to A100 PTX
+without NVIDIA hardware. On Linux with the CUDA toolkit,
+`CUDA_HOME=/usr/local/cuda ./scripts/build_gpu_cuda.sh` builds
+`build/linux/libvxvector_gpu.so`. Build Vx itself where the toolkit is
+installed: only then does it build the CUDA dispatch library that runs the
+kernels on the GPU, and the script refuses any other. The NVIDIA library has not
+run on an NVIDIA GPU yet and is not part of the PostgreSQL image.
+The earlier CUDA Driver API prototype (`src/gpu_lloyd.vx`, `src/gpu_cuda.cpp`,
+`scripts/test_gpu_lloyd_cuda.sh`) remains until that run passes.
