@@ -10,8 +10,8 @@ EXPECTED = {
         {"block": 1, "grid": [{"param": "rows"}], "grid_loops": True},
     ),
     "vxvector_gpu_update_v1": (
-        [("points", 7), ("rows", 1), ("dims", 1), ("k", 1), ("spherical", 1),
-         ("centers", 7), ("labels", 5), ("updated", 7)],
+        [("points", 7), ("rows", 1), ("dims", 1), ("k", 1), ("iteration", 1),
+         ("spherical", 1), ("labels", 5), ("updated", 7), ("errors", 5)],
         {"block": 1, "grid": [{"param": "k"}], "grid_loops": True},
     ),
     "vxvector_gpu_copy_v1": (
@@ -38,7 +38,7 @@ def main(path):
             raise ValueError(f"{name} parameter ABI mismatch: {actual_params}")
         if kernel.get("launch") != launch:
             raise ValueError(f"{name} launch shape mismatch: {kernel.get('launch')}")
-    print("GPU Lloyd PTX manifest matches the smoke-test ABI.")
+    print("GPU Lloyd PTX manifest matches the CUDA trainer ABI.")
 
 
 if __name__ == "__main__":

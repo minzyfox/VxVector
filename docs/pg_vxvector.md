@@ -31,26 +31,38 @@ The adapter's logic is in Vx since Step 2. Its kernel ABI is `vxvector_kmeans_v2
 The Linux worker, the extension, and the PostgreSQL image are rebuilt at `423a10db`. The extension links the Vx object.
 The [pin update record](vx_pin_update_2026-11-14.md#linux-and-postgresql) covers the PostgreSQL suites, snapshot, synthetic recall, and real-data recall at that revision.
 Internal objective results remain evidence for their recorded source and compiler revisions.
-L2 training runs on the Apple GPU as a standalone library since Step 3. Nothing calls it yet.
-Every PostgreSQL user trains on the CPU today. The standalone worker selects the GPU since Step 4, and supports every option on it since Step 5, but the extension still sends version 1 requests, which train on the CPU (Step 6).
-The Docker setup also cannot reach Metal, because it is a Linux VM. A native macOS PostgreSQL could, and the extension needs only POSIX process calls, but that setup is untested. See the VectorChord item in Step 6.
+PostgreSQL sends protocol-v2 requests with `auto`, `cpu`, or `gpu` backend
+selection. Native macOS can select Metal when the GPU library is available;
+the Linux Docker image cannot use Metal and currently falls back to CPU.
+An NVIDIA trainer prototype and worker-ABI wrapper exist, but the CUDA wrapper
+is not yet built against the CUDA toolkit or run on NVIDIA hardware, and it is
+not part of the Linux PostgreSQL build or image.
 The Step 3 kernels split their work into launches of at most about 2 ms, because macOS can stop a long launch and the Vx runtime then aborts. On SIFT-128 they train 24 to 28 times faster than the single-threaded `-O3` CPU kernel, with the same bits. See the [Step 3 record](step3_metal_l2.md#performance).
 
 The NVIDIA-oriented [GPU prototype](../src/gpu_lloyd.vx) is separate from the
 Metal backend. It now emits A100 PTX for separate assignment, update, and copy
-kernels. `scripts/test_gpu_lloyd_cuda.sh` provides a CUDA-driver smoke test for
-those kernels on an NVIDIA host; it has not been run on hardware in this
-environment.
+kernels, with a CUDA library wrapper implementing the worker's GPU ABI. The
+CUDA-driver smoke test in `scripts/test_gpu_lloyd_cuda.sh` checks restart and
+assignment callbacks on an NVIDIA host; it has not been run on hardware in
+this environment. The normal PostgreSQL build/image scripts do not build or
+install this library, so it is not yet available through SQL.
+The wrapper currently calls the CUDA Driver API directly. Vx itself already
+has host-side CUDA orchestration in its CUDA dispatch runtime
+(`../Vx/runtime/cuda_dispatch.cpp`): allocation, transfers, PTX image loading,
+and kernel launches. It remains to test whether the Vx trainer can use that
+runtime and export the worker callbacks, rather than maintaining a separate
+direct-driver launcher.
 The kernels launch blocks across rows or centers with one lane per block; their
-inner work remains serial. They are not integrated into the worker.
-CPU distance calculations use f64 intermediates, while the prototype uses f32.
-The prototype retains old centroids for empty clusters, while CPU training selects sampled replacements.
-These differences require explicit numerical and algorithm policies before result comparisons.
+inner work remains serial. Distance calculations use f64 intermediates; seed
+selection, empty-cluster replacements, spherical normalization, and float32
+sum-overflow handling follow the CPU trainer. The CUDA wrapper has only been
+host-syntax-checked with CUDA API declarations, not compiled against the CUDA
+toolkit or executed on a GPU.
 
 ## Backend selection contract
 
-The following modes are proposed behavior, not an implemented public API.
-Finalize the SQL and worker-protocol spelling during integration.
+The extension exposes these modes through `vxvector.backend_mode`; the setting
+is sent to the worker in protocol v2.
 
 | Mode | Required behavior |
 | --- | --- |
@@ -208,6 +220,7 @@ Exit: the PostgreSQL workflow uses the GPU when supported and CPU otherwise, wit
 - [ ] Add completion-safe overlap only with device timelines and simultaneous-memory accounting.
 - [ ] Develop CPU SIMD as fallback optimization independently of GPU availability.
 - [ ] Add NVIDIA execution and CUDA integration after the Apple path is validated.
+- [ ] Check whether the NVIDIA worker callbacks can be implemented in Vx using its existing host-side CUDA dispatch runtime, rather than the prototype's direct CUDA Driver API wrapper. Verify exported C ABI, runtime linkage, and recoverable worker error behavior on Linux.
 - [ ] Compare against cuVS only on supported NVIDIA hardware with matched semantics and timing boundaries.
 
 Exit: reproducible end-to-end measurements support each performance claim, including cases where CPU is faster.

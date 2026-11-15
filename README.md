@@ -664,8 +664,7 @@ manifest without requiring NVIDIA hardware. Assignment and update launch
 blocks across rows and centers, respectively, but each block uses one lane and
 scans its work serially. On a Linux NVIDIA host with an Ampere-or-newer GPU
 (compute capability 8.0+) and the CUDA toolkit and driver, run
-`CUDA_HOME=/usr/local/cuda ./scripts/test_gpu_lloyd_cuda.sh` to
-compile the PTX, launch assignment/update/copy through the CUDA driver, and
-check a small known result. This smoke test is separate from the worker; it
-does not make NVIDIA training available through SQL or the normal VxVector
-worker, and it is not a performance implementation.
+`CUDA_HOME=/usr/local/cuda ./scripts/test_gpu_lloyd_cuda.sh` to build the
+worker-compatible CUDA library and check restart and assignment results. The
+library is not yet wired into the PostgreSQL image/build flow. The kernels are
+not a performance implementation.
