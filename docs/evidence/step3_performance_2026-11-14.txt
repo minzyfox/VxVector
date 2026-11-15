@@ -1,0 +1,22 @@
+# Step 3 timing and stress, November 14, 2026. Apple M2 Pro (16 GPU cores, 10 CPU cores), macOS 27.2.1, Vx 423a10db.
+# SIFT-128 train vectors, 10 iterations, one restart. GPU: build/gpu/libvxvector_gpu.dylib with the default launch work (2^26).
+# CPU -O3: src/kmeans.vx built with vxc -O3 outside the project build, single-threaded, float64 distances. CPU -O0: the project build.
+# Wall times include copying the samples in and the results out.
+
+## GPU against CPU
+n=8192 k=64: GPU 0.06s  CPU -O3 0.44s  GPU speedup vs -O3 7.6x  GPU==O3 bits True  | CPU -O0 2.70s, O0==O3 bits True
+n=32768 k=256: GPU 0.29s  CPU -O3 6.94s  GPU speedup vs -O3 24.2x  GPU==O3 bits True
+n=65536 k=1024: GPU 1.99s  CPU -O3 54.83s  GPU speedup vs -O3 27.6x  GPU==O3 bits True
+
+## Stress: launches, longest GPU time of one kernel, wall time
+n=32768 k=256: launches 357, longest wait per kernel 2.4 ms, status 0, 0.33 s total 
+n=32768 k=256: launches 357, longest wait per kernel 2.0 ms, status 0, 0.33 s total 
+n=32768 k=256: launches 357, longest wait per kernel 1.0 ms, status 0, 0.32 s total 
+n=32768 k=256: launches 357, longest wait per kernel 1.9 ms, status 0, 0.33 s total 
+n=32768 k=256: launches 357, longest wait per kernel 2.4 ms, status 0, 0.33 s total 
+n=65536 k=1024: launches 2709, longest wait per kernel 1.1 ms, status 0, 2.05 s total 
+n=65536 k=1024: launches 2709, longest wait per kernel 1.9 ms, status 0, 2.05 s total 
+n=65536 k=1024: launches 2709, longest wait per kernel 2.0 ms, status 0, 2.05 s total 
+n=65536 k=1024: launches 2709, longest wait per kernel 1.9 ms, status 0, 2.05 s total 
+n=65536 k=1024: launches 2709, longest wait per kernel 2.0 ms, status 0, 2.06 s total 
+n=262144 k=1024: launches 10773, longest wait per kernel 1.9 ms, status 0, 8.04 s total 

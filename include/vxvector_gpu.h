@@ -29,12 +29,16 @@ enum vxvector_gpu_status {
  * sizes of the last update. All buffers are caller-owned. The samples are
  * copied once into GPU memory, which stays resident for every iteration.
  *
- * Requires 0 < k <= n, dims > 0, iterations > 0, n * dims < 2^31 and
- * k + iterations < 2^31.
+ * launch_work bounds the multiply-adds of each GPU launch, 0 for the default
+ * of 2^26. macOS can stop a long launch (docs/step3_metal_l2.md), so the work
+ * is split into short launches. The split does not change the result.
+ *
+ * Requires 0 < k <= n, dims > 0, iterations > 0, launch_work >= 0,
+ * n * dims < 2^31 and k + iterations < 2^31.
  */
 int32_t vxvector_gpu_l2_v1(const float *samples, int32_t n, int32_t dims,
-                           int32_t k, int32_t iterations, float *centroids,
-                           int32_t *labels, int32_t *counts);
+                           int32_t k, int32_t iterations, int64_t launch_work,
+                           float *centroids, int32_t *labels, int32_t *counts);
 
 #ifdef __cplusplus
 }

@@ -34,6 +34,7 @@ CASES = [
     ("uniform", 2048, 17, 33, 12, "uniform"),
     ("empty_clusters", 64, 4, 4, 5, "two_points"),
     ("empty_replacement", 64, 4, 4, 5, "duplicate_seeds"),
+    ("group_ties", 256, 4, 16, 5, "duplicate_seeds"),
     ("one_center", 100, 8, 1, 4, "blobs"),
     ("every_sample_a_center", 9, 5, 9, 3, "blobs"),
     ("no_iterations", 300, 6, 5, 0, "blobs"),
@@ -41,6 +42,11 @@ CASES = [
     ("sift_8192", 8192, 128, 64, 10, "sift"),
 ]
 SIFT = PROJECT / "build/datasets/sift-128-euclidean.hdf5"
+DEFAULT_WORK = 1 << 26
+# Each case runs with the default work per launch, and again split into many
+# short launches. Both runs must give the same bits.
+SPLIT_WORK = {"sift_8192": 1 << 20}
+SPLIT_WORK_DEFAULT = 4096
 
 
 def make_input(kind, n, dims, seed):
@@ -60,8 +66,10 @@ def make_input(kind, n, dims, seed):
         with h5py.File(SIFT, "r") as dataset:
             return np.asarray(dataset["train"][:n], dtype=np.float32)
     if kind == "duplicate_seeds":
-        # Distinct rows, except that the four seeds (rows 0, 16, 32 and 48)
-        # are equal. Three centers start empty, and each replacement row differs.
+        # Distinct rows, except that every 16th row is 0. With n = 16 * k those
+        # are the seeds, so every center starts equal: the first wins each tie,
+        # the others start empty, and each replacement row differs. With k >= 8
+        # the ties fall inside the kernel's groups of eight centers.
         rows = np.repeat(np.arange(n, dtype=np.float32)[:, None], dims, axis=1)
         rows[::16] = 0.0
         return rows
@@ -74,14 +82,14 @@ def pointer(array, kind):
     return array.ctypes.data_as(ctypes.POINTER(kind))
 
 
-def run_gpu(library, samples, k, iterations):
+def run_gpu(library, samples, k, iterations, launch_work=0):
     n, dims = samples.shape
     centroids = np.zeros((k, dims), dtype=np.float32)
     labels = np.zeros(n, dtype=np.int32)
     counts = np.zeros(k, dtype=np.int32)
     status = library.vxvector_gpu_l2_v1(
         pointer(samples, ctypes.c_float), n, dims, k, iterations,
-        pointer(centroids, ctypes.c_float), pointer(labels, ctypes.c_int32),
+        ctypes.c_int64(launch_work), pointer(centroids, ctypes.c_float), pointer(labels, ctypes.c_int32),
         pointer(counts, ctypes.c_int32))
     return status, centroids, labels, counts
 
@@ -176,35 +184,57 @@ def worker(args):
             print(json.dumps(dict(case=name, skipped="download the SIFT dataset as in README.md")), flush=True)
             continue
         samples = make_input(kind, n, dims, seed=n * 31 + dims)
-        print(f"[case] {name}", file=sys.stderr, flush=True)
-        status, centroids, labels, counts = run_gpu(gpu, samples, k, iterations)
         cpu_status, cpu_centroids, cpu_labels = run_cpu(cpu, samples, k, iterations)
-        result = dict(case=name, n=n, dims=dims, k=k, iterations=iterations,
-                      status=status, cpu_status=cpu_status)
-        if status == OK and cpu_status == 0:
-            objective, not_nearest = independent_checks(samples, centroids, labels)
-            cpu_objective, _ = independent_checks(samples, cpu_centroids, cpu_labels)
-            reference, reference_labels = reference_lloyd(samples, k, iterations)
-            result.update(
-                same_bits_as_reference=reference is not None and bool(np.array_equal(
-                    centroids.view(np.uint32), reference.view(np.uint32))),
-                labels_differ_from_reference=None if reference is None
-                else int((labels != reference_labels).sum()),
-                same_centroid_bits=bool(np.array_equal(
-                    centroids.view(np.uint32), cpu_centroids.view(np.uint32))),
-                label_differences=int((labels != cpu_labels).sum()),
-                max_centroid_difference=float(np.abs(
-                    centroids.astype(np.float64) - cpu_centroids).max()),
-                counts_add_up=bool(counts.sum() == n),
-                objective=objective, cpu_objective=cpu_objective,
-                not_nearest=not_nearest,
-                finite=bool(np.isfinite(centroids).all()))
-        print(json.dumps(result), flush=True)
+        reference, reference_labels = (reference_lloyd(samples, k, iterations)
+                                       if cpu_status == 0 else (None, None))
+        for work in (DEFAULT_WORK, SPLIT_WORK.get(name, SPLIT_WORK_DEFAULT)):
+            label = name if work == DEFAULT_WORK else f"{name}@split"
+            print(f"[case] {label}", file=sys.stderr, flush=True)
+            status, centroids, labels, counts = run_gpu(gpu, samples, k, iterations, work)
+            result = dict(case=label, n=n, dims=dims, k=k, iterations=iterations,
+                          launch_work=work, status=status, cpu_status=cpu_status)
+            check_case(result, samples, k, iterations, status, centroids, labels, counts,
+                       cpu_status, cpu_centroids, cpu_labels, reference, reference_labels)
 
 
-def kernel_launches(iterations):
+def check_case(result, samples, k, iterations, status, centroids, labels, counts,
+               cpu_status, cpu_centroids, cpu_labels, reference, reference_labels):
+    n = len(samples)
+    if status == OK and cpu_status == 0:
+        objective, not_nearest = independent_checks(samples, centroids, labels)
+        cpu_objective, _ = independent_checks(samples, cpu_centroids, cpu_labels)
+        result.update(
+            same_bits_as_reference=reference is not None and bool(np.array_equal(
+                centroids.view(np.uint32), reference.view(np.uint32))),
+            labels_differ_from_reference=None if reference is None
+            else int((labels != reference_labels).sum()),
+            same_centroid_bits=bool(np.array_equal(
+                centroids.view(np.uint32), cpu_centroids.view(np.uint32))),
+            label_differences=int((labels != cpu_labels).sum()),
+            max_centroid_difference=float(np.abs(
+                centroids.astype(np.float64) - cpu_centroids).max()),
+            counts_add_up=bool(counts.sum() == n),
+            objective=objective, cpu_objective=cpu_objective,
+            not_nearest=not_nearest,
+            finite=bool(np.isfinite(centroids).all()))
+    print(json.dumps(result), flush=True)
+
+
+def fit(work, width, limit):
+    return min(max(work // width, 1), limit)
+
+
+def kernel_launches(row):
+    """The launches of vxvector_gpu_l2_run_v2, by the same plan."""
+    n, k, dims, work = row["n"], row["k"], row["dims"], row["launch_work"]
+    center_step = fit(work, fit(32768, 1, n) * dims, k)
+    if center_step < 8:
+        center_step = min(8, k)
+    row_step = fit(work, center_step * dims, n)
+    assign = sum(-(-k // center_step) for _ in range(0, n, row_step))
+    update = 1 + -(-n // fit(work, k * dims, n)) + 1
     # The seed, then an assignment and an update per iteration, then the final assignment.
-    return 2 + 2 * iterations
+    return 1 + row["iterations"] * (assign + update) + assign
 
 
 def gate(row):
@@ -263,8 +293,8 @@ def main():
         launches = len(re.findall(r"^\[Vx Metal\] vx_npu_kernel_\d+: grid", log, flags=re.M))
         row["metal_launches"] = launches
         problems = gate(row)
-        if row["status"] == OK and "skipped" not in row and launches != kernel_launches(row["iterations"]):
-            problems.append(f"{launches} Metal launches, expected {kernel_launches(row['iterations'])}")
+        if row["status"] == OK and "skipped" not in row and launches != kernel_launches(row):
+            problems.append(f"{launches} Metal launches, expected {kernel_launches(row)}")
         if "is copied" in log or "Falling back" in log:
             problems.append("a tensor was copied, or a kernel ran on the CPU")
         row["result"] = "failed: " + "; ".join(problems) if problems else "passed"

@@ -12,21 +12,22 @@
     "math_mode": "MTLMathModeSafe"
   },
   "sources": {
-    "src/gpu_kmeans.vx": "669cda740d42b533bc25cc8be7a0a371b4723b562db6e722b0b722dbb1abfa09",
-    "src/gpu_l2.c": "5cfb6456c3b0298115145029b396ff0ce32cf565193a01569f80a1bf45b32c70",
-    "include/vxvector_gpu.h": "9c013ce2bc2953cac3aa501b9b3fc43c0b9b4295c98724c1424bda606e9b87e0",
+    "src/gpu_kmeans.vx": "506134c08e71fd314952d86dd5eb8377a754527b55a109bcdc97fa7cd525acf2",
+    "src/gpu_l2.c": "0b00770a73762e1abe4a4c249877609d9a31ca31a85a7af124cff000a9811f1e",
+    "include/vxvector_gpu.h": "f801257467833b42759e7a6f7900e858a72471502ed09e466dcd3cebe20b1012",
     "scripts/build_gpu.sh": "235da45f12df031e7fe9e119c47b536192e8c465ddd9a2822194102825ddccc5",
-    "scripts/check_gpu_l2.py": "bce11b0ea12b439ddf69784e3059e95b6f357c154703136fb39f98bddec435c7",
+    "scripts/check_gpu_l2.py": "f1a051705053dcd4c7e960777061fa9d074cf2a8c07dfb950e97426b138bab7f",
     "src/kmeans.vx": "53f3962d49951ab26b11b878e06db9c79904bcb741f42ea53febb88cc1179a82"
   },
   "artifacts": {
-    "build/gpu/gpu_kmeans.o": "c3622ef6cb276c7e5d915ab8057c561b86344f9b2e3e50ed3b45a0c4282072da",
-    "build/gpu/gpu_l2.o": "f4ebed56dce0e477e477c730bbf76b2dcce60708dd61d7c8a019a60d124bb0e7",
-    "build/gpu/libvxvector_gpu.dylib": "8065c5e370a4196566b3a8f0b5473bfbc62fbea8cb442567214d4d9bbb5b65b7",
+    "build/gpu/gpu_kmeans.o": "61f710b8cf9a5918eee88f7db3425fa42db16055973f7fa184724df0dea92929",
+    "build/gpu/gpu_l2.o": "126daf048a8a61b628f3c59a870ccbe43abb868b2a87dee66e39f1e9d94d2a2a",
+    "build/gpu/libvxvector_gpu.dylib": "b7ea60c13916798142bdda0bfeac455ba1e874da7fac30257b3eedf2f60ef7fe",
     "build/libvxvector_kmeans.dylib": "36d3121c3b458c34ceaf4e6119a638f294bf0fd810a3a42524f560178c554008"
   },
-  "generated_msl_sha256": "8ab511b0cd6a7235f754c630bdd966d70c4f47fa3da5e22263d4755ec13c7b4a",
+  "generated_msl_sha256": "70c752249c06c3fcddcd7a5d2b1536721858f8cb0eb51f62e91f0d1665782d03",
   "dataset": {
     "build/datasets/sift-128-euclidean.hdf5": "dd6f0a6ed6b7ebb8934680f861a33ed01ff33991eaee4fd60914d854a0ca5984"
-  }
+  },
+  "default_launch_work": 67108864
 }

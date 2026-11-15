@@ -34,7 +34,7 @@ Internal objective results remain evidence for their recorded source and compile
 L2 training runs on the Apple GPU as a standalone library since Step 3. Nothing calls it yet.
 Every PostgreSQL user trains on the CPU today: the worker has no GPU path yet (Step 4).
 The Docker setup also cannot reach Metal, because it is a Linux VM. A native macOS PostgreSQL could, and the extension needs only POSIX process calls, but that setup is untested. See the VectorChord item in Step 6.
-The Step 3 kernels are correct but not yet safe at realistic sizes. macOS can stop a long launch, and the Vx runtime then aborts. See the [Step 3 record](step3_metal_l2.md#size-limit-macos-can-stop-long-launches).
+The Step 3 kernels split their work into launches of at most about 2 ms, because macOS can stop a long launch and the Vx runtime then aborts. On SIFT-128 they train 24 to 28 times faster than the single-threaded `-O3` CPU kernel, with the same bits. See the [Step 3 record](step3_metal_l2.md#performance).
 
 The NVIDIA-oriented [GPU prototype](../src/gpu_lloyd.vx) is not a validated Metal implementation.
 Its ordinary loops and compilation result do not establish useful GPU parallelism.

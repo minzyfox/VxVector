@@ -1,5 +1,7 @@
-{"mutation":"ties_to_higher_index","check_exit":1,"failed_cases":"empty_clusters empty_replacement ","result":"caught"}
-{"mutation":"wrong_empty_replacement","check_exit":1,"failed_cases":"empty_replacement ","result":"caught"}
-{"mutation":"wrong_seed","check_exit":1,"failed_cases":"blobs wide_rows one_past_a_block uniform empty_replacement every_sample_a_center sift_8192 ","result":"caught"}
-{"mutation":"skipped_last_row","check_exit":1,"failed_cases":"blobs wide_rows one_past_a_block uniform empty_clusters empty_replacement one_center every_sample_a_center sift_8192 ","result":"caught"}
-{"mutation":"no_overflow_flag","check_exit":1,"failed_cases":"sum_overflow ","result":"caught"}
+{"mutation": "ties_to_higher_index_in_group", "check_exit": 1, "failed_cases": "group_ties group_ties@split ", "result": "caught"}
+{"mutation": "ties_to_higher_index_in_remainder", "check_exit": 1, "failed_cases": "empty_clusters empty_clusters@split empty_replacement empty_replacement@split ", "result": "caught"}
+{"mutation": "wrong_empty_replacement", "check_exit": 1, "failed_cases": "empty_replacement empty_replacement@split ", "result": "caught"}
+{"mutation": "wrong_seed", "check_exit": 1, "failed_cases": "blobs blobs@split wide_rows wide_rows@split one_past_a_block one_past_a_block@split uniform uniform@split empty_replacement empty_replacement@split every_sample_a_center every_sample_a_center@split sift_8192 sift_8192@split ", "result": "caught"}
+{"mutation": "update_skips_last_row_of_range", "check_exit": 1, "failed_cases": "blobs blobs@split wide_rows wide_rows@split one_past_a_block one_past_a_block@split uniform uniform@split empty_clusters empty_clusters@split empty_replacement empty_replacement@split one_center one_center@split every_sample_a_center every_sample_a_center@split sift_8192 sift_8192@split ", "result": "caught"}
+{"mutation": "assign_drops_carried_best", "check_exit": 1, "failed_cases": "blobs@split wide_rows@split uniform@split sift_8192@split ", "result": "caught"}
+{"mutation": "no_overflow_flag", "check_exit": 1, "failed_cases": "sum_overflow sum_overflow@split ", "result": "caught"}
