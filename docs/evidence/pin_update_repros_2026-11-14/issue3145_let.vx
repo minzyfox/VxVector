@@ -1,9 +1,0 @@
-fn f(n: i32) -> f64
-requires n > 0
-{
-  let t: f64 = 0.0;
-  let mut s = 0;
-  for i in 0..n invariant s >= 0 { s = s + 1; }
-  return t;
-}
-fn main() -> i32 { let _x = f(3); return 0; }

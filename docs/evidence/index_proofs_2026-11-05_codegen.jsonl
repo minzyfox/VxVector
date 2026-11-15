@@ -1,6 +1,0 @@
-{"case": "nearest_result", "result": "passed", "expected_failure": "E8001"}
-{"case": "nearest_caller", "result": "passed", "expected_failure": "E8006"}
-{"case": "buffer_offset", "result": "passed", "expected_failure": "E8001"}
-{"case": "kernel", "result": "passed", "expected_failure": null}
-{"case": "missing_validity", "result": "passed", "expected_failure": "pointer validity"}
-{"case": "missing_alias_contract", "result": "passed", "expected_failure": "alias contracts"}

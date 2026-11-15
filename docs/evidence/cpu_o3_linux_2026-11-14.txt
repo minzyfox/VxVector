@@ -1,8 +1,0 @@
-  "opt_level": "-O3",
-  "object_sha256": "607c69d102d9377a5f173c19de1d3cf68d4b1c691bea8a1cae91bdc7ef3842b5",
-postgres OK
- CPU extension, worker isolation, cancellation, and rollback checks passed
-Snapshot check passed: concurrent inserts and updates were excluded; centroids matched the original 64 rows.
-{"result": "passed", "index_builds": 24, "centroid_only_builds": 2, "recall_queries": 120, "minimum_recall": 1}
-{"result": "passed", "builds": 24, "recall_queries": 3072, "setting_comparisons": 24}
-EXIT 0

@@ -1,8 +1,0 @@
-# Step 4: the worker on SIFT-128, protocol v2, mode auto against mode cpu. Apple M2 Pro, macOS 27.2.1, Vx 423a10db.
-# The CPU worker uses the project build of src/kmeans.vx, which Vx compiles at -O0.
-rows=100000 leaves=256 samples=32768 auto: backend=GPU device='Apple M2 Pro' reason='GPU available and supports the request' status=0 clustering=0.29s wall=0.68s
-rows=100000 leaves=256 samples=32768 cpu: backend=CPU device='' reason='CPU requested' status=0 clustering=41.48s wall=41.80s
-  same bits: True
-rows=100000 leaves=1024 samples=65536 auto: backend=GPU device='Apple M2 Pro' reason='GPU available and supports the request' status=0 clustering=2.01s wall=2.39s
-rows=100000 leaves=1024 samples=65536 cpu: backend=CPU device='' reason='CPU requested' status=0 clustering=329.08s wall=329.41s
-  same bits: True

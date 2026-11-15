@@ -1,5 +1,0 @@
-postgres OK
-(1 row)
-Snapshot check passed: concurrent inserts and updates were excluded; centroids matched the original 64 rows.
-{"result": "passed", "index_builds": 24, "centroid_only_builds": 2, "recall_queries": 120, "minimum_recall": 1}
-EXIT 0
