@@ -42,6 +42,18 @@ int32_t vxvector_gpu_l2_v1(const float *samples, int32_t n, int32_t dims,
                            float *centroids, int32_t *labels, int32_t *counts);
 
 /*
+ * Step 5: vxvector_gpu_l2_v1 for any metric of enum vxvector_metric in
+ * vxvector_kmeans.h: L2 (0), inner product (1), or cosine (2). Inner product
+ * and cosine add their dot products and squared norms in float32, where the
+ * CPU uses float64. The cosine distance takes sqrt(left) * sqrt(right),
+ * because left * right can overflow float32.
+ */
+int32_t vxvector_gpu_train_v1(const float *samples, int32_t n, int32_t dims,
+                              int32_t k, int32_t iterations, int32_t metric,
+                              int64_t launch_work, float *centroids, int32_t *labels,
+                              int32_t *counts);
+
+/*
  * Step 4: whether this library can train, and the device name. Returns
  * VXVECTOR_GPU_OK, or VXVECTOR_GPU_UNAVAILABLE when there is no Metal device
  * or VX_METAL=0. device receives the name, or an empty string.
@@ -51,8 +63,9 @@ int32_t vxvector_gpu_probe_v1(char *device, size_t size);
 /*
  * Step 4: a trainer with the arguments of vxvector_kmeans_v2, for the data
  * path (vxvector_train_fn in vxvector_data_path.h). points holds the sample,
- * and every row trains. It supports L2 with one restart, no spherical
- * normalization, and no roots. It writes the same layout as the CPU kernel:
+ * and every row trains. It supports one restart, no spherical
+ * normalization, and no roots, for any metric. The data path trains roots on the
+ * CPU. It writes the same layout as the CPU kernel:
  * node 0 is a zero vector with parent -1, then the leaves with parent 0.
  * current, sums, counts, sample_rows and sample_table are unused. Returns 0, 1
  * for a request it rejects or a sum overflow (as the CPU kernel), or 2 when

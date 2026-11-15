@@ -147,8 +147,6 @@ class BackendSelectionTests(unittest.TestCase):
         cases = [
             (dict(), dict(library="/nonexistent/libvxvector_gpu.dylib"), NOT_INSTALLED),
             (dict(), dict(env={"FAKE_GPU_PROBE": "unavailable"}), UNAVAILABLE),
-            (dict(metric=2), dict(), METRIC),
-            (dict(metric=1), dict(), METRIC),
             (dict(restarts=3), dict(), RESTARTS),
             (dict(spherical=1), dict(), SPHERICAL),
         ]
@@ -165,7 +163,6 @@ class BackendSelectionTests(unittest.TestCase):
         cases = [
             (dict(), dict(library="/nonexistent/libvxvector_gpu.dylib"), NOT_INSTALLED),
             (dict(), dict(env={"FAKE_GPU_PROBE": "unavailable"}), UNAVAILABLE),
-            (dict(metric=2), dict(), METRIC),
             (dict(restarts=3), dict(), RESTARTS),
         ]
         for overrides, how, reason in cases:
@@ -237,11 +234,13 @@ class RealGpuTests(unittest.TestCase):
     def test_gpu_and_cpu_workers_give_the_same_bits(self):
         # The second case samples 512 of 3,000 rows, as the data path does. The
         # third has roots, which the CPU trains on the GPU's leaves.
-        for rows, dims, leaves, factor, roots in ((2000, 16, 8, 1000, 0), (3000, 24, 16, 32, 0),
-                                                   (4000, 12, 32, 64, 4)):
-            with self.subTest(rows=rows, roots=roots):
+        for rows, dims, leaves, factor, roots, metric in (
+                (2000, 16, 8, 1000, 0, 0), (3000, 24, 16, 32, 0, 0), (4000, 12, 32, 64, 4, 0),
+                (3000, 24, 16, 32, 0, 1), (3000, 24, 16, 32, 0, 2), (4000, 12, 32, 64, 4, 2)):
+            with self.subTest(rows=rows, roots=roots, metric=metric):
                 points = blobs(rows, dims).tolist()
                 opts = options(row_count=rows, dims=dims, leaf_count=leaves, root_count=roots,
+                               metric=metric,
                                sampling_factor=factor, restarts=1, iterations=8,
                                batch_size=256, memory_budget_bytes=256 * 1024 * 1024)
                 gpu = self.run_real(AUTO, opts, points)

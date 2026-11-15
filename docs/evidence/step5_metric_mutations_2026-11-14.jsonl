@@ -1,0 +1,5 @@
+{"mutation": "cosine_two_zero_vectors_distance_1", "check_exit": 1, "failed_cases": "group_ties/cos group_ties/cos@split ", "result": "caught"}
+{"mutation": "cosine_one_zero_vector_distance_0", "check_exit": 1, "failed_cases": "empty_clusters/cos empty_clusters/cos@split group_ties/cos group_ties/cos@split ", "result": "caught"}
+{"mutation": "inner_product_sign", "check_exit": 1, "failed_cases": "blobs/ip blobs/ip@split wide_rows/ip wide_rows/ip@split one_past_a_block/ip one_past_a_block/ip@split uniform/ip uniform/ip@split empty_clusters/ip empty_clusters/ip@split empty_replacement/ip empty_replacement/ip@split group_ties/ip group_ties/ip@split sift_8192/ip sift_8192/ip@split ", "result": "caught"}
+{"mutation": "angular_group_tie_to_higher", "check_exit": 1, "failed_cases": "group_ties/ip group_ties/ip@split group_ties/cos group_ties/cos@split ", "result": "caught"}
+{"mutation": "cosine_product_root", "check_exit": 1, "failed_cases": "large_vectors/cos large_vectors/cos@split", "result": "caught"}

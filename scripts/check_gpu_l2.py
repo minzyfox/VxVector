@@ -1,4 +1,4 @@
-"""Step 3: check L2 k-means on the Apple GPU against the CPU kernel and
+"""Steps 3 and 5: check k-means on the Apple GPU against the CPU kernel and
 independent float64 calculations, with evidence that Metal ran every kernel.
 
 The parent process runs each case in a worker process with
@@ -39,9 +39,14 @@ CASES = [
     ("every_sample_a_center", 9, 5, 9, 3, "blobs"),
     ("no_iterations", 300, 6, 5, 0, "blobs"),
     ("sum_overflow", 4, 2, 1, 2, "huge"),
+    ("large_vectors", 512, 16, 8, 5, "large"),
     ("sift_8192", 8192, 128, 64, 10, "sift"),
 ]
 SIFT = PROJECT / "build/datasets/sift-128-euclidean.hdf5"
+# These cases also run with the inner product and cosine distances. two_points
+# has zero vectors, which cosine treats specially.
+METRIC_CASES = {"blobs", "wide_rows", "one_past_a_block", "uniform", "empty_clusters",
+                "empty_replacement", "group_ties", "one_center", "sift_8192", "large_vectors"}
 DEFAULT_WORK = 1 << 26
 # Each case runs with the default work per launch, and again split into many
 # short launches. Both runs must give the same bits.
@@ -73,6 +78,10 @@ def make_input(kind, n, dims, seed):
         rows = np.repeat(np.arange(n, dtype=np.float32)[:, None], dims, axis=1)
         rows[::16] = 0.0
         return rows
+    if kind == "large":
+        # Squared norms near 1e20 fit float32, but the product of two near
+        # 1e40 does not, so cosine must not multiply them.
+        return (make_input("blobs", n, dims, seed) * np.float32(2.5e8)).astype(np.float32)
     if kind == "huge":
         return np.full((n, dims), 3.0e38, dtype=np.float32)
     raise ValueError(kind)
@@ -82,19 +91,19 @@ def pointer(array, kind):
     return array.ctypes.data_as(ctypes.POINTER(kind))
 
 
-def run_gpu(library, samples, k, iterations, launch_work=0):
+def run_gpu(library, samples, k, iterations, launch_work=0, metric=0):
     n, dims = samples.shape
     centroids = np.zeros((k, dims), dtype=np.float32)
     labels = np.zeros(n, dtype=np.int32)
     counts = np.zeros(k, dtype=np.int32)
-    status = library.vxvector_gpu_l2_v1(
-        pointer(samples, ctypes.c_float), n, dims, k, iterations,
+    status = library.vxvector_gpu_train_v1(
+        pointer(samples, ctypes.c_float), n, dims, k, iterations, metric,
         ctypes.c_int64(launch_work), pointer(centroids, ctypes.c_float), pointer(labels, ctypes.c_int32),
         pointer(counts, ctypes.c_int32))
     return status, centroids, labels, counts
 
 
-def run_cpu(library, samples, k, iterations):
+def run_cpu(library, samples, k, iterations, metric=0):
     """One restart of the CPU kernel on every sample in order."""
     n, dims = samples.shape
     factor = -(-n // k)
@@ -111,7 +120,7 @@ def run_cpu(library, samples, k, iterations):
     table = np.zeros(slots, dtype=np.int64)
     status = library.vxvector_kmeans_v2(
         pointer(samples, ctypes.c_float), n, dims, 0, k, factor, iterations,
-        1, 0, 0, 0, pointer(nodes, ctypes.c_float),
+        1, metric, 0, 0, pointer(nodes, ctypes.c_float),
         pointer(parents, ctypes.c_int32), pointer(labels, ctypes.c_int32),
         pointer(current, ctypes.c_float), pointer(sums, ctypes.c_float),
         pointer(counts, ctypes.c_int32), pointer(chosen, ctypes.c_int64),
@@ -119,41 +128,56 @@ def run_cpu(library, samples, k, iterations):
     return status, nodes[1:].copy(), labels
 
 
-def independent_checks(samples, centroids, labels):
+def distances(rows, centers, metric):
+    """float64 distances as src/kmeans.vx defines them: squared L2, the negated
+    dot product, or cosine with 0 for two zero vectors and 1 when one is zero."""
+    rows = rows.astype(np.float64)
+    centers = centers.astype(np.float64)
+    if metric == 0:
+        return ((rows[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2)
+    dot = rows @ centers.T
+    if metric == 1:
+        return -dot
+    left = (rows * rows).sum(axis=1)[:, None]
+    right = (centers * centers).sum(axis=1)[None, :]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        cosine = 1.0 - dot / np.sqrt(left * right)
+    cosine = np.where((left == 0) | (right == 0), 1.0, cosine)
+    return np.where((left == 0) & (right == 0), 0.0, cosine)
+
+
+def independent_checks(samples, centroids, labels, metric=0):
     """float64 checks that use neither Vx kernel: the objective, and labels that
     are not the nearest center beyond float32 rounding."""
-    wide = samples.astype(np.float64)
-    centers = centroids.astype(np.float64)
-    distances = ((wide[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2)
-    best = distances.min(axis=1)
-    chosen = distances[np.arange(len(samples)), labels]
+    best = np.empty(len(samples)); chosen = np.empty(len(samples))
+    for start in range(0, len(samples), 1024):
+        d = distances(samples[start:start + 1024], centroids, metric)
+        best[start:start + 1024] = d.min(axis=1)
+        chosen[start:start + 1024] = d[np.arange(len(d)), labels[start:start + 1024]]
     # A label may differ from the float64 nearest center only at a near-tie
     # that float32 cannot separate.
-    slack = 1e-5 * np.maximum(best, 1e-30) + 1e-30
+    slack = 1e-5 * np.maximum(np.abs(best), 1e-30) + 1e-30
     not_nearest = int((chosen - best > slack).sum())
     objective = float(chosen.sum())
     return objective, not_nearest
 
 
-def nearest(samples, centers):
-    """float64 squared L2 distances, in chunks. argmin keeps the lowest index."""
-    centers = centers.astype(np.float64)
+def nearest(samples, centers, metric=0):
+    """float64 distances, in chunks. argmin keeps the lowest index."""
     labels = np.empty(len(samples), dtype=np.int32)
     for start in range(0, len(samples), 1024):
-        wide = samples[start:start + 1024].astype(np.float64)
-        distances = ((wide[:, None, :] - centers[None, :, :]) ** 2).sum(axis=2)
-        labels[start:start + 1024] = distances.argmin(axis=1)
+        labels[start:start + 1024] = distances(samples[start:start + 1024], centers, metric).argmin(axis=1)
     return labels
 
 
-def reference_lloyd(samples, k, iterations):
+def reference_lloyd(samples, k, iterations, metric=0):
     """The policy of docs/step3_metal_l2.md in NumPy, independent of both Vx
     kernels: seeds at c * n // k, float64 assignment, sequential float32 sums
     in sample order (cumsum adds in order), and empty-cluster replacement."""
     n = len(samples)
     centers = samples[[c * n // k for c in range(k)]].copy()
     for iteration in range(iterations):
-        labels = nearest(samples, centers)
+        labels = nearest(samples, centers, metric)
         for c in range(k):
             rows = samples[labels == c]
             if len(rows) == 0:
@@ -164,12 +188,12 @@ def reference_lloyd(samples, k, iterations):
             if not np.isfinite(running).all():
                 return None, None
             centers[c] = running[-1] / np.float32(len(rows))
-    return centers, nearest(samples, centers)
+    return centers, nearest(samples, centers, metric)
 
 
 def worker(args):
     gpu = ctypes.CDLL(os.fspath(GPU_LIBRARY))
-    gpu.vxvector_gpu_l2_v1.restype = ctypes.c_int32
+    gpu.vxvector_gpu_train_v1.restype = ctypes.c_int32
     if args.unavailable:
         samples = make_input("blobs", 64, 4, 1)
         status, *_ = run_gpu(gpu, samples, 4, 2)
@@ -184,25 +208,27 @@ def worker(args):
             print(json.dumps(dict(case=name, skipped="download the SIFT dataset as in README.md")), flush=True)
             continue
         samples = make_input(kind, n, dims, seed=n * 31 + dims)
-        cpu_status, cpu_centroids, cpu_labels = run_cpu(cpu, samples, k, iterations)
-        reference, reference_labels = (reference_lloyd(samples, k, iterations)
-                                       if cpu_status == 0 else (None, None))
-        for work in (DEFAULT_WORK, SPLIT_WORK.get(name, SPLIT_WORK_DEFAULT)):
-            label = name if work == DEFAULT_WORK else f"{name}@split"
-            print(f"[case] {label}", file=sys.stderr, flush=True)
-            status, centroids, labels, counts = run_gpu(gpu, samples, k, iterations, work)
-            result = dict(case=label, n=n, dims=dims, k=k, iterations=iterations,
-                          launch_work=work, status=status, cpu_status=cpu_status)
-            check_case(result, samples, k, iterations, status, centroids, labels, counts,
-                       cpu_status, cpu_centroids, cpu_labels, reference, reference_labels)
+        for metric in (0,) + ((1, 2) if name in METRIC_CASES else ()):
+            cpu_status, cpu_centroids, cpu_labels = run_cpu(cpu, samples, k, iterations, metric)
+            reference, reference_labels = (reference_lloyd(samples, k, iterations, metric)
+                                           if cpu_status == 0 else (None, None))
+            base = name + ("", "/ip", "/cos")[metric]
+            for work in (DEFAULT_WORK, SPLIT_WORK.get(name, SPLIT_WORK_DEFAULT)):
+                label = base if work == DEFAULT_WORK else f"{base}@split"
+                print(f"[case] {label}", file=sys.stderr, flush=True)
+                status, centroids, labels, counts = run_gpu(gpu, samples, k, iterations, work, metric)
+                result = dict(case=label, n=n, dims=dims, k=k, iterations=iterations, metric=metric,
+                              launch_work=work, status=status, cpu_status=cpu_status)
+                check_case(result, samples, k, iterations, status, centroids, labels, counts,
+                           cpu_status, cpu_centroids, cpu_labels, reference, reference_labels, metric)
 
 
 def check_case(result, samples, k, iterations, status, centroids, labels, counts,
-               cpu_status, cpu_centroids, cpu_labels, reference, reference_labels):
+               cpu_status, cpu_centroids, cpu_labels, reference, reference_labels, metric=0):
     n = len(samples)
     if status == OK and cpu_status == 0:
-        objective, not_nearest = independent_checks(samples, centroids, labels)
-        cpu_objective, _ = independent_checks(samples, cpu_centroids, cpu_labels)
+        objective, not_nearest = independent_checks(samples, centroids, labels, metric)
+        cpu_objective, _ = independent_checks(samples, cpu_centroids, cpu_labels, metric)
         result.update(
             same_bits_as_reference=reference is not None and bool(np.array_equal(
                 centroids.view(np.uint32), reference.view(np.uint32))),
@@ -259,7 +285,7 @@ def gate(row):
                             f"centroids up to {row['max_centroid_difference']:.3g} apart")
         if not row["same_bits_as_reference"] or row["labels_differ_from_reference"]:
             problems.append("differs from the NumPy reference")
-        relative = abs(row["objective"] - row["cpu_objective"]) / max(row["cpu_objective"], 1e-30)
+        relative = abs(row["objective"] - row["cpu_objective"]) / max(abs(row["cpu_objective"]), 1e-30)
         if relative > 1e-12:
             problems.append(f"objective differs from the CPU by {relative:.3g}")
     return problems

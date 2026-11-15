@@ -1284,9 +1284,6 @@ fn gpu_reason(o: &CpuOptions, p: &CpuPlan, probe: i32) -> i32 {
   if probe != PROBE_READY {
     return REASON_GPU_UNAVAILABLE;
   }
-  if o.metric != 0 {
-    return REASON_GPU_METRIC;
-  }
   if o.restarts != 1 {
     return REASON_GPU_RESTARTS;
   }

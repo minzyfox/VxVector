@@ -28,7 +28,7 @@ void vxvector_gpu_l2_run_v2(
     int32_t *, int32_t *, int64_t, int64_t, int64_t,                 /* counts */
     int32_t *, int32_t *, int64_t, int64_t, int64_t, int64_t, int64_t, /* overflow */
     float *, float *, int64_t, int64_t, int64_t, int64_t, int64_t,   /* samples */
-    int32_t, int32_t, int32_t, int32_t, int64_t);
+    int32_t, int32_t, int32_t, int32_t, int32_t, int64_t);
 
 /* At most about 2 ms of GPU time per launch on an M2 Pro. */
 #define DEFAULT_LAUNCH_WORK ((int64_t)1 << 26)
@@ -37,8 +37,17 @@ int32_t vxvector_gpu_l2_v1(const float *samples, int32_t n, int32_t dims,
                            int32_t k, int32_t iterations, int64_t launch_work,
                            float *centroids, int32_t *labels, int32_t *counts)
 {
+    return vxvector_gpu_train_v1(samples, n, dims, k, iterations, 0, launch_work,
+                                 centroids, labels, counts);
+}
+
+int32_t vxvector_gpu_train_v1(const float *samples, int32_t n, int32_t dims,
+                              int32_t k, int32_t iterations, int32_t metric,
+                              int64_t launch_work, float *centroids, int32_t *labels,
+                              int32_t *counts)
+{
     if (!samples || !centroids || !labels || !counts || k <= 0 || dims <= 0 ||
-        n < k || iterations <= 0 || launch_work < 0 ||
+        n < k || iterations <= 0 || launch_work < 0 || metric < 0 || metric > 2 ||
         (int64_t)n * dims >= INT32_MAX || (int64_t)k + iterations >= INT32_MAX)
         return VXVECTOR_GPU_INVALID;
     if (launch_work == 0)
@@ -62,7 +71,7 @@ int32_t vxvector_gpu_l2_v1(const float *samples, int32_t n, int32_t dims,
             TENSOR2(g_centers, k, dims), TENSOR1(g_labels, n), TENSOR1(g_best, n),
             TENSOR2(g_sums, k, dims), TENSOR1(g_counts, k),
             TENSOR2(g_overflow, k, dims), TENSOR2(g_samples, n, dims),
-            n, k, dims, iterations, launch_work);
+            n, k, dims, iterations, metric, launch_work);
         /* The Vx function waits for the GPU before it returns. */
         status = VXVECTOR_GPU_OK;
         for (size_t i = 0; i < center_values; i++)
@@ -110,10 +119,10 @@ int32_t vxvector_gpu_kmeans_v1(const float *points, int32_t rows, int32_t dims,
     (void)sampling_factor, (void)seed, (void)current, (void)sums, (void)sample_rows,
         (void)sample_table;
     if (!points || !nodes || !parents || !assignments || !counts || root_count != 0 ||
-        restarts != 1 || metric != 0 || spherical != 0 || dims <= 0)
+        restarts != 1 || spherical != 0 || dims <= 0)
         return 1;
-    int32_t status = vxvector_gpu_l2_v1(points, rows, dims, leaf_count, iterations, 0,
-                                        nodes + dims, assignments, counts);
+    int32_t status = vxvector_gpu_train_v1(points, rows, dims, leaf_count, iterations, metric,
+                                           0, nodes + dims, assignments, counts);
     if (status == VXVECTOR_GPU_UNAVAILABLE)
         return 2;
     if (status != VXVECTOR_GPU_OK)
