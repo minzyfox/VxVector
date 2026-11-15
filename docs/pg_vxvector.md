@@ -36,8 +36,13 @@ Every PostgreSQL user trains on the CPU today. The standalone worker selects the
 The Docker setup also cannot reach Metal, because it is a Linux VM. A native macOS PostgreSQL could, and the extension needs only POSIX process calls, but that setup is untested. See the VectorChord item in Step 6.
 The Step 3 kernels split their work into launches of at most about 2 ms, because macOS can stop a long launch and the Vx runtime then aborts. On SIFT-128 they train 24 to 28 times faster than the single-threaded `-O3` CPU kernel, with the same bits. See the [Step 3 record](step3_metal_l2.md#performance).
 
-The NVIDIA-oriented [GPU prototype](../src/gpu_lloyd.vx) is not a validated Metal implementation.
-Its ordinary loops and compilation result do not establish useful GPU parallelism.
+The NVIDIA-oriented [GPU prototype](../src/gpu_lloyd.vx) is separate from the
+Metal backend. It now emits A100 PTX for separate assignment, update, and copy
+kernels. `scripts/test_gpu_lloyd_cuda.sh` provides a CUDA-driver smoke test for
+those kernels on an NVIDIA host; it has not been run on hardware in this
+environment.
+The kernels launch blocks across rows or centers with one lane per block; their
+inner work remains serial. They are not integrated into the worker.
 CPU distance calculations use f64 intermediates, while the prototype uses f32.
 The prototype retains old centroids for empty clusters, while CPU training selects sampled replacements.
 These differences require explicit numerical and algorithm policies before result comparisons.

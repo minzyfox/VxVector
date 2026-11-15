@@ -22,7 +22,7 @@ production-scale recall and performance still need validation.
 | Automatic GPU or CPU selection | In the standalone worker (protocol version 2): `auto`, `cpu`, or `gpu`, with the reason reported |
 | PostgreSQL using the GPU | The extension sends protocol version 2 in `auto` mode. On native macOS it can select Metal; Linux Docker currently falls back to CPU. Full native SQL-to-index validation remains |
 | Installing into your own PostgreSQL | Native macOS extension loading is **untested**. VectorChord 1.1.1 currently fails to load on the tested macOS setup; see [native PostgreSQL setup](#install-into-an-existing-postgresql-untested) |
-| NVIDIA GPUs | Not supported. `src/gpu_lloyd.vx` is an untested compilation prototype |
+| NVIDIA GPUs | A CUDA-driver smoke test can run the A100 PTX on hardware; NVIDIA training is not integrated into the worker |
 
 ## Choose the PostgreSQL deployment
 
@@ -657,8 +657,15 @@ batch size, and optional buffer budget in bytes (default 64 MiB).
 The reported budget covers adapter buffers. It excludes caller-owned source
 storage, allocator overhead, and Vx runtime memory.
 
-The Apple GPU kernels are in `src/gpu_kmeans.vx`. `src/gpu_lloyd.vx` is an older, separate NVIDIA prototype that accepts device-resident
-samples and initialized centroids. `VX_CHECK_GPU=1` checks that Vx generates
-A100 code without requiring GPU hardware. The generated code has no parallel
-launch metadata for the assignment and reduction loops. This path is untested
-on an NVIDIA device and is not a performance implementation.
+The Apple GPU kernels are in `src/gpu_kmeans.vx`. `src/gpu_lloyd.vx` is a
+separate NVIDIA prototype that accepts device-resident samples and initialized
+centroids. `VX_CHECK_GPU=1 ./scripts/build.sh` emits A100 PTX and its launch
+manifest without requiring NVIDIA hardware. Assignment and update launch
+blocks across rows and centers, respectively, but each block uses one lane and
+scans its work serially. On a Linux NVIDIA host with an Ampere-or-newer GPU
+(compute capability 8.0+) and the CUDA toolkit and driver, run
+`CUDA_HOME=/usr/local/cuda ./scripts/test_gpu_lloyd_cuda.sh` to
+compile the PTX, launch assignment/update/copy through the CUDA driver, and
+check a small known result. This smoke test is separate from the worker; it
+does not make NVIDIA training available through SQL or the normal VxVector
+worker, and it is not a performance implementation.
