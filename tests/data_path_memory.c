@@ -52,17 +52,25 @@ int32_t vxvector_run_reason_v2(const struct vxvector_cpu_options *options,
                                    vxvector_next_row_fn next, void *context,
                                    struct vxvector_input_row *row, double (*clock)(void),
                                    const struct vxvector_cpu_buffers *buffers, int32_t backend,
-                                   vxvector_train_fn gpu_train);
+                                   int32_t (*gpu_restart)(const float *, int32_t, int32_t,
+                                                          int32_t, int32_t, int32_t, int32_t,
+                                                          float *, int32_t *),
+                                   int32_t (*gpu_assign)(const float *, int32_t, int32_t,
+                                                         const float *, int32_t, int32_t,
+                                                         int32_t *));
 
 int32_t checked_run(const struct vxvector_cpu_options *options,
                     const struct vxvector_cpu_plan *plan,
                     vxvector_next_row_fn next, void *context,
                     struct vxvector_input_row *row, double (*clock)(void),
                     const struct vxvector_cpu_buffers *buffers, int32_t backend,
-                    vxvector_train_fn gpu_train) {
+                    int32_t (*gpu_restart)(const float *, int32_t, int32_t, int32_t, int32_t,
+                                           int32_t, int32_t, float *, int32_t *),
+                    int32_t (*gpu_assign)(const float *, int32_t, int32_t, const float *,
+                                          int32_t, int32_t, int32_t *)) {
     ++run_calls;
     int32_t outcome = vxvector_run_reason_v2(options, plan, next, context, row, clock, buffers,
-                                             backend, gpu_train);
+                                             backend, gpu_restart, gpu_assign);
     return outcome == OUTCOME_OK && forced_outcome ? forced_outcome : outcome;
 }
 

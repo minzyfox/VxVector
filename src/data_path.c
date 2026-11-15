@@ -105,16 +105,26 @@ int32_t vxvector_run_reason_v2(const struct vxvector_cpu_options *options,
                                vxvector_next_row_fn next, void *context,
                                struct vxvector_input_row *row, double (*clock)(void),
                                const struct vxvector_cpu_buffers *buffers, int32_t backend,
-                               vxvector_train_fn gpu_train);
+                               int32_t (*gpu_restart)(const float *, int32_t, int32_t, int32_t,
+                                                      int32_t, int32_t, int32_t, float *,
+                                                      int32_t *),
+                               int32_t (*gpu_assign)(const float *, int32_t, int32_t,
+                                                     const float *, int32_t, int32_t,
+                                                     int32_t *));
 int32_t vxvector_select_backend_reason_v1(const struct vxvector_cpu_options *options,
                                           const struct vxvector_cpu_plan *plan, int32_t mode,
                                           int32_t probe, struct vxvector_backend_choice *choice);
-/* The CPU kernel. The data path calls it directly; its address only fills the
- * trainer argument on the CPU. */
-int32_t vxvector_kmeans_v2(const float *, int32_t, int32_t, int32_t, int32_t,
-                           int32_t, int32_t, int32_t, int32_t, int32_t, int32_t,
-                           float *, int32_t *, int32_t *, float *, float *,
-                           int32_t *, int64_t *, int64_t *);
+/* Stand-ins that fill the GPU arguments on the CPU, which never calls them. */
+static int32_t no_gpu_restart(const float *p, int32_t r, int32_t d, int32_t k, int32_t i,
+                              int32_t m, int32_t s, float *c, int32_t *l) {
+    (void)p, (void)r, (void)d, (void)k, (void)i, (void)m, (void)s, (void)c, (void)l;
+    return 2;
+}
+static int32_t no_gpu_assign(const float *p, int32_t r, int32_t d, const float *c, int32_t k,
+                             int32_t m, int32_t *l) {
+    (void)p, (void)r, (void)d, (void)c, (void)k, (void)m, (void)l;
+    return 2;
+}
 
 static int32_t fail(struct vxvector_data_error *error, int32_t code,
                     const char *message) {
@@ -188,7 +198,7 @@ int32_t vxvector_run_cpu_v1(const struct vxvector_cpu_options *o,
 
 int32_t vxvector_run_v2(const struct vxvector_cpu_options *o,
                         const struct vxvector_backend_choice *choice,
-                        vxvector_train_fn gpu_train,
+                        const struct vxvector_gpu_trainer *gpu,
                         vxvector_next_row_fn next, void *context,
                         struct vxvector_cpu_result *result,
                         struct vxvector_data_error *error) {
@@ -197,7 +207,8 @@ int32_t vxvector_run_v2(const struct vxvector_cpu_options *o,
     memset(result, 0, sizeof(*result));
     if (!next)
         return fail(error, VXVECTOR_DATA_INVALID, "A source row reader is required");
-    if (!choice || (choice->backend == VXVECTOR_BACKEND_GPU && !gpu_train))
+    if (!choice || (choice->backend == VXVECTOR_BACKEND_GPU &&
+                    (!gpu || !gpu->restart || !gpu->assign)))
         return fail(error, VXVECTOR_DATA_INVALID, "A backend choice, and a GPU trainer for the GPU, are required");
     struct vxvector_cpu_result r = {0};
     int32_t status = vxvector_plan_cpu_v1(o, &r.plan, error);
@@ -231,7 +242,8 @@ int32_t vxvector_run_v2(const struct vxvector_cpu_options *o,
     struct vxvector_input_row row = {0};
     status = report(error, vxvector_run_reason_v2(o, &p, next, context, &row, seconds, &b,
                                                   choice->backend,
-                                                  gpu_train ? gpu_train : vxvector_kmeans_v2));
+                                                  gpu ? gpu->restart : no_gpu_restart,
+                                                  gpu ? gpu->assign : no_gpu_assign));
     if (status == VXVECTOR_DATA_OK) {
         *result = r;
         memset(&r, 0, sizeof(r));

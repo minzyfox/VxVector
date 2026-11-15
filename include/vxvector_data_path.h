@@ -120,17 +120,20 @@ struct vxvector_backend_choice {
     uint64_t gpu_bytes;
 };
 
-/* A trainer with the arguments of vxvector_kmeans_v2 in vxvector_kmeans.h.
- * It returns 0 on success, 1 when it rejects the request, and 2 when the GPU
- * fails after training starts. */
-typedef int32_t (*vxvector_train_fn)(const float *, int32_t, int32_t, int32_t, int32_t,
-                                     int32_t, int32_t, int32_t, int32_t, int32_t, int32_t,
-                                     float *, int32_t *, int32_t *, float *, float *,
-                                     int32_t *, int64_t *, int64_t *);
+/* The GPU functions of the data path: vxvector_gpu_restart_v1 and
+ * vxvector_gpu_assign_v1 in vxvector_gpu.h. Each returns 0 on success, 1 when
+ * it rejects the request, and 2 when the GPU fails after training starts. */
+struct vxvector_gpu_trainer {
+    int32_t (*restart)(const float *points, int32_t rows, int32_t dims, int32_t leaf_count,
+                       int32_t iterations, int32_t metric, int32_t restart, float *centers,
+                       int32_t *labels);
+    int32_t (*assign)(const float *points, int32_t rows, int32_t dims, const float *centers,
+                      int32_t k, int32_t metric, int32_t *labels);
+};
 
 /* Choose the backend after planning and before any row is read or any GPU
- * memory is allocated. The GPU must be ready, support the request (L2, one
- * restart, no spherical normalization, no roots), fit the i32 kernel limits,
+ * memory is allocated. The GPU must be ready, support the request (no
+ * spherical normalization), fit the i32 kernel limits,
  * and fit memory_budget_bytes together with the CPU plan. In MODE_AUTO, any
  * of these failing selects the CPU, and choice gives the reason. In MODE_GPU
  * it returns VXVECTOR_DATA_GPU, and choice still gives the reason. */
@@ -143,12 +146,14 @@ int32_t vxvector_select_backend_v1(const struct vxvector_cpu_options *options,
 const char *vxvector_backend_reason_v1(int32_t reason);
 
 /* vxvector_run_cpu_v1 with the backend that vxvector_select_backend_v1 chose.
- * gpu_train is required for the GPU and ignored for the CPU. The result has
- * the same layout on both. A GPU failure after training starts returns
+ * gpu is required for the GPU and ignored for the CPU. On the GPU, each
+ * restart trains there, the data path keeps the restart with the lowest
+ * float64 objective, and roots train on the CPU. The result has the same
+ * layout on both. A GPU failure after training starts returns
  * VXVECTOR_DATA_GPU. The data path does not train again on the CPU. */
 int32_t vxvector_run_v2(const struct vxvector_cpu_options *options,
                         const struct vxvector_backend_choice *choice,
-                        vxvector_train_fn gpu_train,
+                        const struct vxvector_gpu_trainer *gpu,
                         vxvector_next_row_fn next, void *context,
                         struct vxvector_cpu_result *result,
                         struct vxvector_data_error *error);

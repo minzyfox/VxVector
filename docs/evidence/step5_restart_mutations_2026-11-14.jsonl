@@ -1,0 +1,4 @@
+{"mutation": "keeps_a_worse_restart", "check_exit": 1, "failed_tests": "test_gpu_and_cpu_workers_agree test_gpu_restarts_keep_the_lowest_objective ", "result": "caught"}
+{"mutation": "wrong_restart_shift", "check_exit": 1, "failed_tests": "test_gpu_and_cpu_workers_agree ", "result": "caught"}
+{"mutation": "no_reassignment_for_an_earlier_best", "check_exit": 1, "failed_tests": "test_data_path_keeps_the_assignments_of_the_best_restart ", "result": "caught"}
+{"mutation": "never_copies_the_best", "check_exit": 1, "failed_tests": "test_gpu_and_cpu_workers_agree test_gpu_restarts_keep_the_lowest_objective ", "result": "caught"}

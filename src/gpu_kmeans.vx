@@ -3,7 +3,8 @@
 // One restart of Lloyd's algorithm on samples that the caller already chose
 // and gathered, in sample order. The policy is in docs/step3_metal_l2.md. It
 // follows run_restart in src/kmeans.vx:
-// - Seeds: center c starts at sample c * n / k.
+// - Seeds: center c starts at sample (c * n / k + shift) % n, where shift is
+//   that of the restart, 0 for the first.
 // - Assignment: the nearest center by squared L2, inner product, or cosine
 //   distance. A tie keeps the lower index. The GPU adds the distance in f32,
 //   where the CPU uses f64.
@@ -39,13 +40,17 @@ ensures writes_only()
   return value - value == 0.0;
 }
 
-// Center c of k starts at sample c * n / k.
-pub fn vxvector_gpu_seed_v1(centers: &mut Tensor<f32, [?, ?], Memory::HBM>,
-  samples: &Tensor<f32, [?, ?], Memory::HBM>, n: i32, k: i32, dims: i32) -> void {
+// Center c of k starts at sample (c * n / k + shift) % n. Restart r of the CPU
+// kernel shifts by r * 104729 (spaced_position in src/kmeans.vx), and shift is
+// that modulo n.
+pub fn vxvector_gpu_seed_v2(centers: &mut Tensor<f32, [?, ?], Memory::HBM>,
+  samples: &Tensor<f32, [?, ?], Memory::HBM>, n: i32, k: i32, dims: i32,
+  shift: i32) -> void {
   spawn on(Topology::Device) {
     for c in 0..k across blocks {
       for d in 0..dims across lanes(256) {
-        let position = (i64::from(c) * i64::from(n) / i64::from(k)) as i32;
+        let position = ((i64::from(c) * i64::from(n) / i64::from(k) + i64::from(shift))
+          % i64::from(n)) as i32;
         centers[c][d] = samples[position][d];
       }
     }
@@ -462,9 +467,10 @@ pub fn vxvector_gpu_l2_run_v2(centers: &mut Tensor<f32, [?, ?], Memory::HBM>,
   counts: &mut Tensor<i32, [?], Memory::HBM>,
   overflow: &mut Tensor<i32, [?, ?], Memory::HBM>,
   samples: &Tensor<f32, [?, ?], Memory::HBM>,
-  n: i32, k: i32, dims: i32, iterations: i32, metric: i32, launch_work: i64) -> void {
+  n: i32, k: i32, dims: i32, iterations: i32, metric: i32, shift: i32,
+  launch_work: i64) -> void {
   let update_step = fit(launch_work, i64::from(k) * i64::from(dims), i64::from(n));
-  vxvector_gpu_seed_v1(centers, samples, n, k, dims);
+  vxvector_gpu_seed_v2(centers, samples, n, k, dims, shift);
   for iteration in 0..iterations {
     vxvector_gpu_assign_all_v1(labels, best, samples, centers, n, k, dims, metric, launch_work);
     vxvector_gpu_zero_v1(sums, counts, k, dims);

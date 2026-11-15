@@ -61,24 +61,26 @@ int32_t vxvector_gpu_train_v1(const float *samples, int32_t n, int32_t dims,
 int32_t vxvector_gpu_probe_v1(char *device, size_t size);
 
 /*
- * Step 4: a trainer with the arguments of vxvector_kmeans_v2, for the data
- * path (vxvector_train_fn in vxvector_data_path.h). points holds the sample,
- * and every row trains. It supports one restart, no spherical
- * normalization, and no roots, for any metric. The data path trains roots on the
- * CPU. It writes the same layout as the CPU kernel:
- * node 0 is a zero vector with parent -1, then the leaves with parent 0.
- * current, sums, counts, sample_rows and sample_table are unused. Returns 0, 1
- * for a request it rejects or a sum overflow (as the CPU kernel), or 2 when
- * the GPU fails.
+ * Steps 4 and 5: one restart for the data path (vxvector_gpu_restart_fn in
+ * vxvector_data_path.h). points holds the sample, and every row trains.
+ * Restart r starts from the seeds of the CPU kernel's restart r. Writes
+ * leaf_count * dims centers and rows labels of the final assignment. Returns
+ * 0, 1 for a request it rejects or a sum overflow (as the CPU kernel), or 2
+ * when the GPU fails.
  */
-int32_t vxvector_gpu_kmeans_v1(const float *points, int32_t rows, int32_t dims,
-                               int32_t root_count, int32_t leaf_count,
-                               int32_t sampling_factor, int32_t iterations,
-                               int32_t restarts, int32_t metric, int32_t spherical,
-                               int32_t seed, float *nodes, int32_t *parents,
-                               int32_t *assignments, float *current, float *sums,
-                               int32_t *counts, int64_t *sample_rows,
-                               int64_t *sample_table);
+int32_t vxvector_gpu_restart_v1(const float *points, int32_t rows, int32_t dims,
+                                int32_t leaf_count, int32_t iterations, int32_t metric,
+                                int32_t restart, float *centers, int32_t *labels);
+
+/*
+ * Step 5: labels of the nearest of the k centers for each of the rows points,
+ * as the final assignment of a restart computes them. For the data path, when
+ * an earlier restart than the last is the best. Returns 0, 1 for a request it
+ * rejects, or 2 when the GPU fails.
+ */
+int32_t vxvector_gpu_assign_v1(const float *points, int32_t rows, int32_t dims,
+                               const float *centers, int32_t k, int32_t metric,
+                               int32_t *labels);
 
 #ifdef __cplusplus
 }

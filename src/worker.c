@@ -53,7 +53,7 @@ static int32_t next_row(void *context, struct vxvector_input_row *row) {
  * next to the worker. */
 struct gpu_library {
     int32_t (*probe)(char *device, size_t size);
-    vxvector_train_fn train;
+    struct vxvector_gpu_trainer trainer;
 };
 
 static int32_t load_gpu(const char *worker, struct gpu_library *gpu, char *device, size_t size) {
@@ -69,8 +69,9 @@ static int32_t load_gpu(const char *worker, struct gpu_library *gpu, char *devic
     if (!library)
         return VXVECTOR_PROBE_NOT_INSTALLED;
     *(void **)&gpu->probe = dlsym(library, "vxvector_gpu_probe_v1");
-    *(void **)&gpu->train = dlsym(library, "vxvector_gpu_kmeans_v1");
-    if (!gpu->probe || !gpu->train)
+    *(void **)&gpu->trainer.restart = dlsym(library, "vxvector_gpu_restart_v1");
+    *(void **)&gpu->trainer.assign = dlsym(library, "vxvector_gpu_assign_v1");
+    if (!gpu->probe || !gpu->trainer.restart || !gpu->trainer.assign)
         return VXVECTOR_PROBE_NOT_INSTALLED;
     return gpu->probe(device, size) == 0 ? VXVECTOR_PROBE_READY : VXVECTOR_PROBE_UNAVAILABLE;
 }
@@ -150,7 +151,7 @@ int main(int argc, char **argv) {
     if (!reader.values)
         return fail(version, &reply, VXVECTOR_DATA_MEMORY, "Could not allocate the worker input row");
     struct vxvector_cpu_result result;
-    reply.base.status = vxvector_run_v2(&request.options, &choice, gpu.train, next_row, &reader,
+    reply.base.status = vxvector_run_v2(&request.options, &choice, &gpu.trainer, next_row, &reader,
                                         &result, &error);
     free(reader.values);
     if (reply.base.status != 0)

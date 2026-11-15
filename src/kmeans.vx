@@ -1053,8 +1053,8 @@ fn no_seconds() -> f64 {
 pub fn vxvector_run_reason_v2(options: *const CpuOptions, plan: *const CpuPlan,
 next: fn(*mut u8, *mut InputRow) -> i32, context: *mut u8, row: *mut InputRow,
 clock: fn() -> f64, buffers: *const CpuBuffers, backend: i32,
-gpu_train: fn(*const f32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32,
-  *mut f32, *mut i32, *mut i32, *mut f32, *mut f32, *mut i32, *mut i64, *mut i64) -> i32) -> i32 {
+gpu_restart: fn(*const f32, i32, i32, i32, i32, i32, i32, *mut f32, *mut i32) -> i32,
+gpu_assign: fn(*const f32, i32, i32, *const f32, i32, i32, *mut i32) -> i32) -> i32 {
   let o: CpuOptions = unsafe { options[0] };
   let p: CpuPlan = unsafe { plan[0] };
   let b: CpuBuffers = unsafe { buffers[0] };
@@ -1137,21 +1137,75 @@ gpu_train: fn(*const f32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32,
 
   // The data path samples already, so the kernel takes every collected row in
   // order. The pairs and the table are free again and serve as its scratch.
-  // The GPU trainer takes the same arguments and gives the same layout. It
+  // On the GPU, each restart runs there, and this function picks the best as
+  // train does on the CPU: the first, then any with a strictly lower
+  // objective. The objective adds the float64 distance of each sample to the
+  // center that the GPU assigned it, with the CPU's distance. Where the GPU's
+  // labels are the float64 nearest centers, this is the CPU's objective. It
+  // costs O(rows * dims), not the O(rows * k * dims) of sample_objective.
+  // Restart 0 trains in place, and later restarts train into current. Each
+  // writes its labels to assignments. When the best restart is not the last,
+  // the GPU assigns the samples to the best centers again. A GPU trainer
   // returns 2 when the GPU fails after training starts, which is reported and
   // not run again on the CPU.
   start = clock();
   let mut status = 0;
   if backend == BACKEND_GPU {
-    // The GPU trains the leaves only, straight into their place after the
-    // roots. Its node 0 and parent -1 land on the root slots, which the root
-    // training below overwrites.
     let roots = i64::from(o.root_count);
-    status = gpu_train(b.sample as *const f32, count as i32, o.dims,
-      0, o.leaf_count, o.sampling_factor, o.iterations, o.restarts,
-      o.metric, o.spherical, o.seed, offset_mut(b.nodes, roots * width),
-      offset_mut(b.parents, roots), b.assignments,
-      b.current, b.sums, b.counts, b.positions, b.table);
+    let leaf_values = i64::from(o.leaf_count) * width;
+    let nodes: *mut f32 = b.nodes;
+    let parents: *mut i32 = b.parents;
+    let assignments: *mut i32 = b.assignments;
+    let current: *mut f32 = b.current;
+    let leaves: *mut f32 = offset_mut(nodes, (1i64 + roots) * width);
+    let rows: i32 = count as i32;
+    let distance_metric = match o.metric {
+      0 => {
+        DistanceMetric::L2
+      },
+      1 => {
+        DistanceMetric::InnerProduct
+      },
+      _ => {
+        DistanceMetric::Cosine
+      },
+    };
+    let mut best_objective: f64 = no_seconds();
+    let mut best_restart = 0;
+    let mut restart = 0;
+    while restart < o.restarts && status == 0 {
+      let mut centers: *mut f32 = leaves;
+      if restart > 0 {
+        centers = current;
+      }
+      status = gpu_restart(b.sample as *const f32, rows, dims, o.leaf_count,
+        o.iterations, o.metric, restart, centers, assignments);
+      if status == 0 && o.restarts > 1 && rows > 0 && o.leaf_count > 0 {
+        let objective = unsafe { labeled_objective(b.sample as *const f32, rows, dims,
+          centers as *const f32, o.leaf_count, assignments as *const i32, &distance_metric) };
+        if restart == 0 {
+          best_objective = objective;
+        } else if below(objective, best_objective) {
+          best_objective = objective;
+          best_restart = restart;
+          unsafe { copy_vector(leaves, current as *const f32, leaf_values); }
+        }
+      }
+      restart = restart + 1;
+    }
+    if status == 0 && best_restart != o.restarts - 1 {
+      status = gpu_assign(b.sample as *const f32, rows, dims, leaves as *const f32,
+        o.leaf_count, o.metric, assignments);
+    }
+    if status == 0 {
+      for d in 0..dims {
+        unsafe { nodes[d] = 0.0; }
+      }
+      unsafe { parents[0] = -1; }
+      for node in 1i64..(1i64 + roots + i64::from(o.leaf_count)) {
+        unsafe { parents[node] = 0; }
+      }
+    }
     if status == 0 && o.root_count > 0 {
       status = train_roots(&o, b.nodes, b.parents, b.current, b.sums, b.counts,
         b.positions, b.table);
@@ -1178,6 +1232,38 @@ gpu_train: fn(*const f32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i32,
     return DATA_NONFINITE_CENTROID;
   }
   return DATA_OK;
+}
+
+// Whether left < right. A float comparison as a branch condition crashes the
+// prover (vx-lang/Vx#3145), so a call keeps it out of the facts.
+fn below(left: f64, right: f64) -> bool {
+  return left < right;
+}
+
+// The sum of the float64 distances from each of the rows of data to the
+// center that labels gives it. The labels come from the GPU, which the prover
+// cannot see, so a check states their bound, as sample_row does.
+unsafe fn labeled_objective(data: *const f32, rows: i32, dims: i32, centers: *const f32,
+k: i32, labels: *const i32, metric: &DistanceMetric) -> f64
+requires k > 0 && dims > 0 && rows > 0
+requires valid(data, (rows as i64) * (dims as i64))
+requires initialized(data, (rows as i64) * (dims as i64))
+requires valid(centers, (k as i64) * (dims as i64))
+requires initialized(centers, (k as i64) * (dims as i64))
+requires valid(labels, rows)
+requires initialized(labels, rows)
+{
+  let width = i64::from(dims);
+  let mut objective: f64 = no_seconds();
+  for row in 0..rows {
+    let mut center = unsafe { labels[row] };
+    if center < 0 || center >= k {
+      center = 0;
+    }
+    let point: *const f32 = offset(data, i64::from(row) * width);
+    objective += unsafe { centroid_distance(point, centers, center, k, dims, metric) };
+  }
+  return objective;
 }
 
 // Trains the roots on the CPU from the leaves in nodes, as vxvector_kmeans_v2
@@ -1283,9 +1369,6 @@ fn gpu_reason(o: &CpuOptions, p: &CpuPlan, probe: i32) -> i32 {
   }
   if probe != PROBE_READY {
     return REASON_GPU_UNAVAILABLE;
-  }
-  if o.restarts != 1 {
-    return REASON_GPU_RESTARTS;
   }
   if o.spherical != 0 {
     return REASON_GPU_SPHERICAL;

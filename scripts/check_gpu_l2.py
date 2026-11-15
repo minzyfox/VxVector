@@ -40,13 +40,22 @@ CASES = [
     ("no_iterations", 300, 6, 5, 0, "blobs"),
     ("sum_overflow", 4, 2, 1, 2, "huge"),
     ("large_vectors", 512, 16, 8, 5, "large"),
+    ("cosine_near_ties", 3072, 64, 48, 8, "near_parallel"),
     ("sift_8192", 8192, 128, 64, 10, "sift"),
 ]
 SIFT = PROJECT / "build/datasets/sift-128-euclidean.hdf5"
 # These cases also run with the inner product and cosine distances. two_points
 # has zero vectors, which cosine treats specially.
 METRIC_CASES = {"blobs", "wide_rows", "one_past_a_block", "uniform", "empty_clusters",
-                "empty_replacement", "group_ties", "one_center", "sift_8192", "large_vectors"}
+                "empty_replacement", "group_ties", "one_center", "sift_8192", "large_vectors",
+                "cosine_near_ties"}
+# Inputs with float32 near-ties. GPU and CPU may diverge there, and the gate is
+# the declared tolerance of docs/step5_gpu_options.md, not equal bits.
+TOLERANT_CASES = {"cosine_near_ties"}
+# A label that is not the float64 nearest center is a near-tie when the gap is
+# below this, relative to the distance, or absolute for cosine.
+TIE_RELATIVE, TIE_COSINE = 1e-5, 1e-6
+OBJECTIVE_TOLERANCE = 1e-3
 DEFAULT_WORK = 1 << 26
 # Each case runs with the default work per launch, and again split into many
 # short launches. Both runs must give the same bits.
@@ -78,6 +87,16 @@ def make_input(kind, n, dims, seed):
         rows = np.repeat(np.arange(n, dtype=np.float32)[:, None], dims, axis=1)
         rows[::16] = 0.0
         return rows
+    if kind == "near_parallel":
+        # The worker's sample of 6,000 blobs far from the origin, as
+        # tests/test_backend.py builds them: nearly parallel vectors, whose
+        # cosine distances to competing centers differ by about 1e-8.
+        sys.path.insert(0, os.fspath(PROJECT / "scripts"))
+        from sampler_reference import training_rows
+        rng = np.random.default_rng(9)
+        centers = rng.normal(0, 10, size=(8, dims))
+        rows = (centers[rng.integers(0, 8, size=6000)] + rng.normal(0, 1, size=(6000, dims))).astype(np.float32)
+        return np.ascontiguousarray(rows[list(training_rows(6000, 48, 64, 42))][:n])
     if kind == "large":
         # Squared norms near 1e20 fit float32, but the product of two near
         # 1e40 does not, so cosine must not multiply them.
@@ -156,7 +175,7 @@ def independent_checks(samples, centroids, labels, metric=0):
         chosen[start:start + 1024] = d[np.arange(len(d)), labels[start:start + 1024]]
     # A label may differ from the float64 nearest center only at a near-tie
     # that float32 cannot separate.
-    slack = 1e-5 * np.maximum(np.abs(best), 1e-30) + 1e-30
+    slack = TIE_RELATIVE * np.maximum(np.abs(best), 1e-30) + (TIE_COSINE if metric == 2 else 1e-30)
     not_nearest = int((chosen - best > slack).sum())
     objective = float(chosen.sum())
     return objective, not_nearest
@@ -276,6 +295,18 @@ def gate(row):
             problems.append("non-finite centroids or counts that do not add up")
         if row["not_nearest"]:
             problems.append(f"{row['not_nearest']} labels are not the nearest center")
+        exact = (row["same_centroid_bits"] and not row["label_differences"]
+                 and row["same_bits_as_reference"] and not row["labels_differ_from_reference"])
+        relative = (row["objective"] - row["cpu_objective"]) / max(abs(row["cpu_objective"]), 1e-30)
+        row["exact"] = exact
+        row["objective_relative"] = relative
+        if row["case"].split("/")[0].split("@")[0] in TOLERANT_CASES:
+            # float32 near-ties: every label must still be the nearest center
+            # up to a near-tie (not_nearest above), and the objective must stay
+            # within the tolerance of the CPU's.
+            if abs(relative) > OBJECTIVE_TOLERANCE:
+                problems.append(f"objective differs from the CPU by {relative:.3g}, over the tolerance")
+            return problems
         # These inputs have no float32 near-ties, and an exact tie goes to the
         # lower index in float32 and float64 alike, so every bit must match.
         # A matching objective is not enough: equal-cost centroids in another
@@ -285,8 +316,7 @@ def gate(row):
                             f"centroids up to {row['max_centroid_difference']:.3g} apart")
         if not row["same_bits_as_reference"] or row["labels_differ_from_reference"]:
             problems.append("differs from the NumPy reference")
-        relative = abs(row["objective"] - row["cpu_objective"]) / max(abs(row["cpu_objective"]), 1e-30)
-        if relative > 1e-12:
+        if abs(relative) > 1e-12:
             problems.append(f"objective differs from the CPU by {relative:.3g}")
     return problems
 
