@@ -4,7 +4,7 @@
 set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-vx_root="${VX_ROOT:-$(cd "$project_root/../.." && pwd)/Vx}"
+vx_root="${VX_ROOT:-$(cd "$project_root/.." && pwd)/Vx}"
 profile="${VX_PROFILE:-debug}"
 revision="$(cat "$project_root/vx-revision.txt")"
 machine="${VXVECTOR_GPU_MACHINE:-$vx_root/fleet/m4-uma.vx}"
@@ -56,4 +56,5 @@ clang -O2 -Wall -Wextra -Werror -fPIC -fobjc-arc -c "$project_root/src/gpu_devic
 clang -shared "$out/gpu_kmeans.o" "$out/gpu_l2.o" "$out/gpu_device.o" "$dispatch" \
   -framework Metal -framework Foundation \
   -Wl,-rpath,"$(dirname "$dispatch")" -o "$out/libvxvector_gpu.dylib"
+ln -sf gpu/libvxvector_gpu.dylib "$project_root/build/libvxvector_gpu.dylib"
 printf '%s\n' "$dispatch" > "$out/dispatch-path.txt"
