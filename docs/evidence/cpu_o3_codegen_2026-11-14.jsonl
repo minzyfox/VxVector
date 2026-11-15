@@ -1,0 +1,13 @@
+{"case": "audit", "result": "passed", "expected_failure": null}
+{"case": "audit_past_end", "result": "passed", "expected_failure": "trusted clause"}
+{"case": "nearest_result", "result": "passed", "expected_failure": "E8001"}
+{"case": "nearest_caller", "result": "passed", "expected_failure": "E8006"}
+{"case": "buffer_offset", "result": "passed", "expected_failure": "E8001"}
+{"case": "sample_row_bound", "result": "passed", "expected_failure": "E8001"}
+{"case": "first_slot_bound", "result": "passed", "expected_failure": "E8001"}
+{"case": "table_too_small", "result": "passed", "expected_failure": "E8001"}
+{"case": "gather_destination", "result": "passed", "expected_failure": "E8006"}
+{"case": "missing_validity", "result": "passed", "expected_failure": "E8012"}
+{"case": "exact_math_o3", "result": "passed", "expected_failure": null}
+{"case": "kernel", "result": "passed", "expected_failure": null}
+{"case": "missing_alias_contract", "result": "passed", "expected_failure": "alias contracts"}

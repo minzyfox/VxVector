@@ -189,6 +189,8 @@ Exit: the PostgreSQL workflow uses the GPU when supported and CPU otherwise, wit
 ## Step 7: performance and later backends
 
 - [ ] Establish an optimized CPU baseline with `-O3` and inspect its generated instructions.
+  Started November 14, 2026: the builds use `-O3`, with the same bits as `-O0` and about 6x faster CPU training. See the [record](cpu_o3_2026-11-14.md).
+  Instruction inspection, threads, and SIMD remain.
 - [ ] Profile GPU assignment, centroid updates, transfers, allocation, and launch overhead on native hardware.
 - [ ] Improve measured bottlenecks through tiling, fusion, reductions, and workspace reuse.
 - [ ] Recheck numerical behavior and final-index recall after arithmetic or reduction-order changes.
@@ -213,6 +215,7 @@ Exit: reproducible end-to-end measurements support each performance claim, inclu
 - [Vx pin update to 423a10db](vx_pin_update_2026-11-14.md).
 - [Step 3 Metal L2 record](step3_metal_l2.md).
 - [Step 4 backend selection record](step4_backend_selection.md).
+- [CPU kernel at -O3](cpu_o3_2026-11-14.md).
 - [November 8 Vx usage review](vx_usage_review_2026-11-08.md) and [Vx issue drafts](vx_issue_drafts_2026-11-08.md).
 
 These references supply procedures and evidence. They do not add prerequisites or override this sequence.

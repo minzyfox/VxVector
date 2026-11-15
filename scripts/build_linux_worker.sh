@@ -30,7 +30,7 @@ docker exec -w "$source_dir" "$builder" bash -lc \
   > "$project_root/build/linux/vx-build.log" 2>&1
 docker cp "$project_root/src/kmeans.vx" "$builder:$source_dir/vxvector_kmeans.vx"
 docker exec -w "$source_dir" "$builder" bash -lc \
-  'source config.local && VX_FLAT_DBG=1 target/debug/vxc vxvector_kmeans.vx --action emit-obj -o vxvector_kmeans.o' \
+  'source config.local && VX_FLAT_DBG=1 target/debug/vxc -O3 vxvector_kmeans.vx --action emit-obj -o vxvector_kmeans.o' \
   > "$project_root/build/linux/kmeans-build.log" 2>&1
 if ! grep -Fq '[flat-codegen] emitted module via the flat path' "$project_root/build/linux/kmeans-build.log"; then
   cat "$project_root/build/linux/kmeans-build.log" >&2
@@ -41,7 +41,8 @@ docker cp "$builder:$source_dir/vxvector_kmeans.o" "$project_root/build/linux/km
 docker cp "$project_root/scripts/write_build_info.py" "$builder:/tmp/vxvector-write-build-info.py"
 docker exec "$builder" python3 /tmp/vxvector-write-build-info.py \
   --compiler "$source_dir/target/debug/vxc" --source "$source_dir/vxvector_kmeans.vx" \
-  --object "$source_dir/vxvector_kmeans.o" --revision "$revision" --output /tmp/vxvector-build-info.json
+  --object "$source_dir/vxvector_kmeans.o" --revision "$revision" --opt-level 3 \
+  --output /tmp/vxvector-build-info.json
 docker cp "$builder:/tmp/vxvector-build-info.json" "$project_root/build/linux/vx-build-info.json"
 printf '%s\n' "$revision" > "$project_root/build/linux/vx-revision.txt"
 printf '%s\n' "$source_dir" > "$project_root/build/linux/vx-source-path.txt"

@@ -1,0 +1,3 @@
+# vxvector_kmeans_v2 at -O0 (Step 4 build) against -O3, bit for bit: status, nodes, parents, assignments.
+# 3 shapes x 3 metrics x spherical 0/1 x restarts 1/3 x roots 0/4 x factor 4/1000 x seed 1/99, 16 leaves, 6 iterations.
+{"cases": 288, "identical": 288}

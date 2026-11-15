@@ -1,0 +1,7 @@
+# The worker on SIFT-128 after the -O3 CPU build. Same inputs as step4_worker_sift_2026-11-14.txt, where the CPU was -O0.
+rows=100000 leaves=256 samples=32768 auto: backend=GPU device='Apple M2 Pro' reason='GPU available and supports the request' status=0 clustering=0.32s wall=0.68s
+rows=100000 leaves=256 samples=32768 cpu: backend=CPU device='' reason='CPU requested' status=0 clustering=6.82s wall=7.11s
+  same bits: True
+rows=100000 leaves=1024 samples=65536 auto: backend=GPU device='Apple M2 Pro' reason='GPU available and supports the request' status=0 clustering=2.00s wall=2.33s
+rows=100000 leaves=1024 samples=65536 cpu: backend=CPU device='' reason='CPU requested' status=0 clustering=54.44s wall=54.73s
+  same bits: True

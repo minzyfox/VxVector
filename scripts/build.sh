@@ -23,7 +23,9 @@ mkdir -p "$project_root/build"
     echo "Rebuild Vx with VX_VERSION_WITH_COMMIT=1 before building VxVector." >&2
     exit 1
   fi
-  if ! VX_FLAT_DBG=1 "$compiler" "$project_root/src/kmeans.vx" \
+  # -O3 gives the same bits as -O0: the kernel's float operations carry no
+  # fast-math flags (scripts/check_kernel_codegen.py checks this).
+  if ! VX_FLAT_DBG=1 "$compiler" -O3 "$project_root/src/kmeans.vx" \
     --action emit-obj -o "$project_root/build/kmeans.o" > "$project_root/build/kmeans-build.log" 2>&1; then
     cat "$project_root/build/kmeans-build.log" >&2
     exit 1
@@ -56,7 +58,7 @@ mkdir -p "$project_root/build"
 
   python3 "$project_root/scripts/write_build_info.py" --compiler "$compiler" \
     --source "$project_root/src/kmeans.vx" --object "$project_root/build/kmeans.o" \
-    --revision "$revision" --output "$project_root/build/vx-build-info.json"
+    --revision "$revision" --opt-level 3 --output "$project_root/build/vx-build-info.json"
 
   if [[ "${VX_CHECK_GPU:-0}" == "1" ]]; then
     "$vx_root/target/$profile/vxc" --machine "$vx_root/fleet/a100-40.vx" \

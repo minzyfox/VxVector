@@ -20,6 +20,20 @@ def check_copy(llvm):
         raise AssertionError('Copy load/store alias contracts are missing from LLVM')
 
 
+def check_exact_math(llvm):
+    """The shipped build is -O3. Its float results match -O0 only while no float
+    operation allows reassociation or contraction. Vx writes those permissions as
+    fastmath attributes or as fused multiply-add intrinsics."""
+    flags = re.findall(r'fastmath<([a-z, ]*)>', llvm)
+    loose = [f for f in flags if f.strip() not in ('', 'none')]
+    if loose:
+        raise AssertionError(f'Float operations with fast-math flags: {sorted(set(loose))}')
+    if re.search(r'llvm\.intr\.(fma|fmuladd)\b', llvm):
+        raise AssertionError('Fused multiply-add intrinsics would change float results')
+    if not re.search(r'llvm\.fadd [^\n]*: f64', llvm):
+        raise AssertionError('Expected float64 additions in the kernel')
+
+
 # The functions that C calls. Their unsafe calls trust the capacities that the
 # headers require of the caller.
 BOUNDARIES = {'vxvector_kmeans_v2', 'vxvector_plan_cpu_reason_v1', 'vxvector_run_reason_v2',
@@ -121,6 +135,17 @@ def main():
             if result.returncode == 0 or expected not in result.stderr:
                 raise AssertionError(f'{name} must fail with {expected}: {result.stderr}')
             print(json.dumps(dict(case=name, result='passed', expected_failure=expected)), flush=True)
+        # The -O3 build, as scripts/build.sh compiles it.
+        path = Path(temporary) / 'kernel_o3.vx'
+        path.write_text(source)
+        result = subprocess.run([str(compiler), '-O3', str(path), '--action', 'emit-llvm'],
+                                cwd=args.vx_root, env=dict(os.environ, VX_FLAT_DBG='1'),
+                                capture_output=True, text=True, timeout=120)
+        if result.returncode != 0:
+            raise AssertionError(f'The -O3 kernel did not compile: {result.stderr}')
+        check_exact_math(result.stdout)
+        print(json.dumps(dict(case='exact_math_o3', result='passed', expected_failure=None)), flush=True)
+
         for name, text, expected in cases:
             path = Path(temporary) / (name + '.vx')
             path.write_text(text)

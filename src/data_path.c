@@ -1,4 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE /* CLOCK_MONOTONIC_RAW */
+#endif
 /* The C side of the CPU data path. The option checks, buffer sizing, sampling,
  * row reads and checks, and clustering are in src/kmeans.vx. This file keeps
  * the parts that stay in C:
@@ -149,9 +152,17 @@ int32_t vxvector_select_backend_v1(const struct vxvector_cpu_options *o,
 }
 
 #ifndef VXVECTOR_PLAN_ONLY
+/* CLOCK_MONOTONIC counts in microseconds on macOS, too coarse for a fast
+ * training phase. CLOCK_MONOTONIC_RAW counts in tens of nanoseconds there. */
+#if defined(__APPLE__) && defined(CLOCK_MONOTONIC_RAW)
+#define VXVECTOR_CLOCK CLOCK_MONOTONIC_RAW
+#else
+#define VXVECTOR_CLOCK CLOCK_MONOTONIC
+#endif
+
 static double seconds(void) {
     struct timespec time;
-    if (clock_gettime(CLOCK_MONOTONIC, &time) != 0)
+    if (clock_gettime(VXVECTOR_CLOCK, &time) != 0)
         return 0.0;
     return (double)time.tv_sec + (double)time.tv_nsec / 1e9;
 }
