@@ -13,10 +13,11 @@ enum vxvector_gpu_status {
     /* A float32 centroid sum was not finite, as status 1 of the CPU kernel. */
     VXVECTOR_GPU_OVERFLOW = 1,
     VXVECTOR_GPU_INVALID = 2,
-    /* No Metal device, or VX_METAL=0. The function never runs on the CPU. */
+    /* No usable GPU backend. The function never runs on the CPU. */
     VXVECTOR_GPU_UNAVAILABLE = 3
 };
 
+/* The direct Metal k-means API. */
 /*
  * Step 3: one restart of L2 Lloyd's algorithm on the Apple GPU, macOS only.
  *
@@ -69,9 +70,9 @@ void vxvector_gpu_timings_v1(struct vxvector_gpu_timings *timings);
 const char *vxvector_gpu_version_v1(void);
 
 /*
- * Step 4: whether this library can train, and the device name. Returns
- * VXVECTOR_GPU_OK, or VXVECTOR_GPU_UNAVAILABLE when there is no Metal device
- * or VX_METAL=0. device receives the name, or an empty string.
+ * Whether this library can train, and the device name. Returns
+ * VXVECTOR_GPU_OK or VXVECTOR_GPU_UNAVAILABLE. device receives the name, or
+ * an empty string.
  */
 int32_t vxvector_gpu_probe_v1(char *device, size_t size);
 

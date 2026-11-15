@@ -69,5 +69,15 @@ mkdir -p "$project_root/build"
     "$vx_root/target/$profile/vxc" --machine "$vx_root/fleet/a100-40.vx" \
       "$project_root/src/gpu_lloyd.vx" --action emit-llvm \
       > "$project_root/build/gpu_lloyd.mlir"
+    "$vx_root/target/$profile/vxc" --machine "$vx_root/fleet/a100-40.vx" \
+      "$project_root/src/gpu_lloyd.vx" --action emit-ptx \
+      -o "$project_root/build/gpu_lloyd.ptx"
+    for kernel in vxvector_gpu_assign_v1 vxvector_gpu_update_v1 vxvector_gpu_copy_v1; do
+      if ! grep -Fq ".visible .entry $kernel(" "$project_root/build/gpu_lloyd.ptx" \
+        || ! grep -Fq "\"name\": \"$kernel\"" "$project_root/build/gpu_lloyd.json"; then
+        echo "PTX or launch manifest is missing kernel $kernel." >&2
+        exit 1
+      fi
+    done
   fi
 )
