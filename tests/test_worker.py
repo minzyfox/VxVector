@@ -20,7 +20,22 @@ class Reply(c.Structure):
         ("message", c.c_char * 256)]
 
 
+class RequestV2(c.Structure):
+    _fields_ = [("magic", c.c_uint64), ("options", Options),
+                ("backend_mode", c.c_int32), ("reserved", c.c_int32)]
+
+
+class ReplyV2(c.Structure):
+    _fields_ = [("base", Reply), ("backend", c.c_int32), ("reason", c.c_int32),
+                ("gpu_bytes", c.c_uint64), ("device", c.c_char * 64),
+                ("reason_text", c.c_char * 128),
+                ("gpu_allocation_seconds", c.c_double), ("gpu_copy_in_seconds", c.c_double),
+                ("gpu_training_seconds", c.c_double), ("gpu_copy_out_seconds", c.c_double),
+                ("gpu_version", c.c_char * 64)]
+
+
 WORKER = os.environ.get("VXVECTOR_WORKER")
+FAKE_GPU = os.environ.get("VXVECTOR_FAKE_GPU")
 
 
 @unittest.skipUnless(WORKER, "set VXVECTOR_WORKER to the native CPU worker executable")
@@ -71,6 +86,53 @@ class WorkerTests(unittest.TestCase):
             self.assertNotEqual(reply.status, 0)
             self.assertTrue(reply.message)
             self.assertNotEqual(result.returncode, 0)
+
+    def test_v2_auto_uses_ready_gpu_and_reports_backend(self):
+        if not FAKE_GPU:
+            self.skipTest("set VXVECTOR_FAKE_GPU to the fake GPU library")
+        request = RequestV2(0x32524B5758544556,
+                            options(row_count=4, sampling_factor=100, dims=2,
+                                    leaf_count=2, iterations=1, restarts=1),
+                            0, 0)
+        payload = bytes(request) + b"".join(struct.pack("=Iff", 2, *row)
+                                           for row in ((0, 0), (0, 1), (10, 10), (10, 11)))
+        environment = os.environ.copy()
+        environment["VXVECTOR_GPU_LIBRARY"] = FAKE_GPU
+        result = subprocess.run([WORKER], input=payload, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=10, env=environment)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertGreaterEqual(len(result.stdout), 2 * c.sizeof(ReplyV2))
+        ready = ReplyV2.from_buffer_copy(result.stdout[:c.sizeof(ReplyV2)])
+        done = ReplyV2.from_buffer_copy(
+            result.stdout[c.sizeof(ReplyV2):2 * c.sizeof(ReplyV2)])
+        self.assertEqual(ready.base.status, 0, ready.base.message)
+        self.assertEqual((ready.backend, ready.reason), (1, 1))
+        self.assertEqual(ready.device.split(b"\0", 1)[0], b"Fake GPU")
+        self.assertEqual(done.base.status, 0, done.base.message)
+        self.assertEqual(done.gpu_version.split(b"\0", 1)[0], b"Fake GPU 1")
+        self.assertEqual(done.gpu_training_seconds, 0.25)
+        self.assertGreater(done.gpu_bytes, 0)
+        self.assertGreaterEqual(done.base.buffer_bytes, done.gpu_bytes)
+
+    def test_v2_auto_falls_back_to_cpu_when_gpu_library_is_missing(self):
+        request = RequestV2(0x32524B5758544556,
+                            options(row_count=4, sampling_factor=100, dims=2,
+                                    leaf_count=1, iterations=1, restarts=1),
+                            0, 0)
+        payload = bytes(request) + b"".join(struct.pack("=Iff", 2, *row)
+                                           for row in ((0, 0), (0, 1), (10, 10), (10, 11)))
+        environment = os.environ.copy()
+        environment["VXVECTOR_GPU_LIBRARY"] = "/no/such/vxvector-gpu-library"
+        result = subprocess.run([WORKER], input=payload, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, timeout=10, env=environment)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertGreaterEqual(len(result.stdout), 2 * c.sizeof(ReplyV2))
+        ready = ReplyV2.from_buffer_copy(result.stdout[:c.sizeof(ReplyV2)])
+        done = ReplyV2.from_buffer_copy(
+            result.stdout[c.sizeof(ReplyV2):2 * c.sizeof(ReplyV2)])
+        self.assertEqual((ready.backend, ready.reason), (0, 2))
+        self.assertEqual(ready.reason_text.split(b"\0", 1)[0], b"GPU library not installed")
+        self.assertEqual(done.base.status, 0, done.base.message)
 
 
 if __name__ == "__main__":

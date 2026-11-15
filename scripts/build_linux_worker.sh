@@ -2,7 +2,7 @@
 set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-vx_root="${VX_ROOT:-$(cd "$project_root/../.." && pwd)/Vx}"
+vx_root="${VX_ROOT:-$(cd "$project_root/.." && pwd)/Vx}"
 revision="$(cat "$project_root/vx-revision.txt")"
 builder="${VXVECTOR_VX_BUILD_CONTAINER:-vxvector-vx-build}"
 source_dir="/workspace/vxvector-vx/$revision"

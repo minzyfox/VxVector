@@ -38,8 +38,16 @@
 
 extern char **environ;
 static char *worker_path;
+static int backend_mode = VXVECTOR_MODE_AUTO;
 static pid_t active_worker_pid;
 static int active_worker_fd = -1;
+
+static const struct config_enum_entry backend_modes[] = {
+    {"auto", VXVECTOR_MODE_AUTO, false},
+    {"cpu", VXVECTOR_MODE_CPU, false},
+    {"gpu", VXVECTOR_MODE_GPU, false},
+    {NULL, 0, false}
+};
 
 static void backend_exit(int code, Datum argument) {
     (void)code;
@@ -54,9 +62,12 @@ static void backend_exit(int code, Datum argument) {
 
 void vxvector_pg_init(void) {
     on_proc_exit(backend_exit, (Datum)0);
-    DefineCustomStringVariable("vxvector.worker_path", "CPU worker executable", NULL,
+    DefineCustomStringVariable("vxvector.worker_path", "VxVector worker executable", NULL,
                                &worker_path, "/usr/local/libexec/vxvector/vxvector-worker",
                                PGC_SUSET, 0, NULL, NULL, NULL);
+    DefineCustomEnumVariable("vxvector.backend_mode", "GPU backend selection mode", NULL,
+                             &backend_mode, VXVECTOR_MODE_AUTO, backend_modes,
+                             PGC_SUSET, 0, NULL, NULL, NULL);
 }
 
 struct build_state {
@@ -114,7 +125,7 @@ static void cleanup(struct build_state *s) {
 static void check_deadline(struct build_state *s) {
     CHECK_FOR_INTERRUPTS();
     if (now_seconds() >= s->deadline)
-        ereport(ERROR, (errcode(ERRCODE_QUERY_CANCELED), errmsg("VxVector CPU worker timed out")));
+        ereport(ERROR, (errcode(ERRCODE_QUERY_CANCELED), errmsg("VxVector worker timed out")));
 }
 
 static void transfer(struct build_state *s, void *data, size_t bytes, bool writing) {
@@ -130,18 +141,33 @@ static void transfer(struct build_state *s, void *data, size_t bytes, bool writi
         if (count < 0 && errno == EINTR)
             continue;
         if (count == 0 || (errno != EAGAIN && errno != EWOULDBLOCK))
-            ereport(ERROR, (errcode(ERRCODE_EXTERNAL_ROUTINE_EXCEPTION), errmsg("VxVector CPU worker closed the connection or failed")));
+            ereport(ERROR, (errcode(ERRCODE_EXTERNAL_ROUTINE_EXCEPTION), errmsg("VxVector worker closed the connection or failed")));
         struct pollfd descriptor = {s->fd, writing ? POLLOUT : POLLIN, 0};
         int ready = poll(&descriptor, 1, 50);
         if (ready < 0 && errno != EINTR)
-            ereport(ERROR, (errmsg("Could not wait for the VxVector CPU worker: %m")));
+            ereport(ERROR, (errmsg("Could not wait for the VxVector worker: %m")));
     }
 }
 
 static void spawn_worker(struct build_state *s) {
     int sockets[2];
-    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sockets) != 0)
+    int socket_type = SOCK_STREAM;
+#ifdef SOCK_CLOEXEC
+    socket_type |= SOCK_CLOEXEC;
+#endif
+    if (socketpair(AF_UNIX, socket_type, 0, sockets) != 0)
         ereport(ERROR, (errmsg("Could not create the VxVector worker socket: %m")));
+#ifndef SOCK_CLOEXEC
+    for (int i = 0; i < 2; ++i) {
+        if (fcntl(sockets[i], F_SETFD, FD_CLOEXEC) < 0) {
+            int saved_errno = errno;
+            close(sockets[0]);
+            close(sockets[1]);
+            errno = saved_errno;
+            ereport(ERROR, (errmsg("Could not mark the VxVector worker socket close-on-exec: %m")));
+        }
+    }
+#endif
     s->fd = sockets[0];
     active_worker_fd = s->fd;
     posix_spawn_file_actions_t actions;
@@ -159,21 +185,34 @@ static void spawn_worker(struct build_state *s) {
     posix_spawn_file_actions_destroy(&actions);
     close(sockets[1]);
     if (code)
-        ereport(ERROR, (errcode(ERRCODE_EXTERNAL_ROUTINE_EXCEPTION), errmsg("Could not start the VxVector CPU worker: %s", strerror(code))));
+        ereport(ERROR, (errcode(ERRCODE_EXTERNAL_ROUTINE_EXCEPTION), errmsg("Could not start the VxVector worker: %s", strerror(code))));
     active_worker_pid = s->pid;
     if (fcntl(s->fd, F_SETFL, O_NONBLOCK) < 0)
         ereport(ERROR, (errmsg("Could not configure the VxVector worker socket: %m")));
 }
 
-static void read_reply(struct build_state *s, struct vxvector_worker_reply *reply,
+static void read_reply(struct build_state *s, struct vxvector_worker_reply_v2 *reply,
                         struct vxvector_cpu_options *options, struct vxvector_cpu_plan *plan) {
     transfer(s, reply, sizeof(*reply), false);
-    reply->message[sizeof(reply->message) - 1] = 0;
-    if (reply->status)
-        ereport(ERROR, (errcode(ERRCODE_EXTERNAL_ROUTINE_EXCEPTION), errmsg("VxVector CPU worker: %s", reply->message)));
-    if (reply->dims != options->dims || reply->nodes != plan->node_count ||
-        reply->samples != plan->sample_count || reply->buffer_bytes != plan->buffer_bytes + (uint64_t)options->dims * 4)
-        ereport(ERROR, (errmsg("VxVector CPU worker returned an incompatible response")));
+    reply->base.message[sizeof(reply->base.message) - 1] = 0;
+    reply->reason_text[sizeof(reply->reason_text) - 1] = 0;
+    reply->device[sizeof(reply->device) - 1] = 0;
+    reply->gpu_version[sizeof(reply->gpu_version) - 1] = 0;
+    if (reply->base.status)
+        ereport(ERROR, (errcode(ERRCODE_EXTERNAL_ROUTINE_EXCEPTION),
+                        errmsg("VxVector worker: %s", reply->base.message)));
+    uint64 expected_buffer_bytes = plan->buffer_bytes + (uint64_t)options->dims * 4;
+    if (reply->backend != VXVECTOR_BACKEND_CPU && reply->backend != VXVECTOR_BACKEND_GPU)
+        ereport(ERROR, (errmsg("VxVector worker returned an invalid backend")));
+    if (reply->backend == VXVECTOR_BACKEND_CPU && reply->gpu_bytes != 0)
+        ereport(ERROR, (errmsg("VxVector CPU worker returned GPU buffer usage")));
+    if (reply->gpu_bytes > UINT64_MAX - expected_buffer_bytes)
+        ereport(ERROR, (errmsg("VxVector worker returned overflowing buffer usage")));
+    expected_buffer_bytes += reply->gpu_bytes;
+    if (reply->base.dims != options->dims || reply->base.nodes != plan->node_count ||
+        reply->base.samples != plan->sample_count ||
+        reply->base.buffer_bytes != expected_buffer_bytes)
+        ereport(ERROR, (errmsg("VxVector worker returned an incompatible response")));
 }
 
 static void finish_worker(struct build_state *s) {
@@ -188,11 +227,11 @@ static void finish_worker(struct build_state *s) {
             s->pid = 0;
             active_worker_pid = 0;
             if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
-                ereport(ERROR, (errmsg("VxVector CPU worker exited unsuccessfully")));
+                ereport(ERROR, (errmsg("VxVector worker exited unsuccessfully")));
             return;
         }
         if (waited < 0 && errno != EINTR)
-            ereport(ERROR, (errmsg("Could not reap the VxVector CPU worker: %m")));
+            ereport(ERROR, (errmsg("Could not reap the VxVector worker: %m")));
         pg_usleep(10000);
     }
 }
@@ -334,12 +373,15 @@ char *vxvector_pg_run(Oid relation_id, const char *column, const int32_t *lists,
         char *source = quote_qualified_identifier(schema, source_name);
         char *vector_sql_type = quote_qualified_identifier(get_namespace_name(vector_namespace), "vector");
 
-        ereport(WARNING, (errmsg("GPU acceleration is unavailable; running CPU k-means")));
         s->deadline = now_seconds() + (double)timeout_ms / 1000.0;
         spawn_worker(s);
-        struct vxvector_worker_request request = {VXVECTOR_WORKER_MAGIC, options};
+        struct vxvector_worker_request_v2 request = {
+            .magic = VXVECTOR_WORKER_MAGIC_V2,
+            .options = options,
+            .backend_mode = backend_mode
+        };
         transfer(s, &request, sizeof(request), true);
-        struct vxvector_worker_reply reply;
+        struct vxvector_worker_reply_v2 reply;
         read_reply(s, &reply, &options, &plan);
         double transfer_start = now_seconds();
         s->scan = table_beginscan_strat(s->relation, s->snapshot, 0, NULL, true, false);
@@ -416,17 +458,29 @@ char *vxvector_pg_run(Oid relation_id, const char *column, const int32_t *lists,
         double index_seconds = now_seconds() - index_start;
         StringInfoData json;
         initStringInfo(&json);
-        appendStringInfoString(&json, "{\"backend\":\"cpu\",\"centroid_table\":");
+        appendStringInfo(&json, "{\"backend\":\"%s\",\"backend_reason\":",
+                         reply.backend == VXVECTOR_BACKEND_GPU ? "gpu" : "cpu");
+        escape_json(&json, reply.reason_text);
+        appendStringInfoString(&json, ",\"device\":");
+        if (reply.device[0]) escape_json(&json, reply.device); else appendStringInfoString(&json, "null");
+        appendStringInfoString(&json, ",\"gpu_version\":");
+        if (reply.gpu_version[0]) escape_json(&json, reply.gpu_version); else appendStringInfoString(&json, "null");
+        appendStringInfoString(&json, ",\"centroid_table\":");
         escape_json(&json, centroids);
         appendStringInfoString(&json, ",\"index\":");
         if (skip_index) appendStringInfoString(&json, "null"); else escape_json(&json, index);
         appendStringInfo(&json, ",\"rows\":%llu,\"samples\":%llu,\"dims\":%d,\"nodes\":%llu,\"seed\":%d,\"buffer_bytes\":%llu,"
                          "\"timings\":{\"count_seconds\":%.9f,\"transfer_seconds\":%.9f,\"worker_read_seconds\":%.9f,"
-                         "\"sample_seconds\":%.9f,\"clustering_seconds\":%.9f,\"centroid_write_seconds\":%.9f,\"index_seconds\":%.9f}}",
+                         "\"sample_seconds\":%.9f,\"clustering_seconds\":%.9f,\"gpu_allocation_seconds\":%.9f,"
+                         "\"gpu_copy_in_seconds\":%.9f,\"gpu_training_seconds\":%.9f,\"gpu_copy_out_seconds\":%.9f,"
+                         "\"centroid_write_seconds\":%.9f,\"index_seconds\":%.9f}}",
                          (unsigned long long)rows, (unsigned long long)plan.sample_count, dims,
-                         (unsigned long long)plan.node_count, seed, (unsigned long long)(reserve + reply.buffer_bytes),
-                         count_seconds, transfer_seconds, reply.read_seconds, reply.sample_seconds,
-                         reply.clustering_seconds, write_seconds, index_seconds);
+                         (unsigned long long)plan.node_count, seed,
+                         (unsigned long long)(reserve + reply.base.buffer_bytes),
+                         count_seconds, transfer_seconds, reply.base.read_seconds, reply.base.sample_seconds,
+                         reply.base.clustering_seconds, reply.gpu_allocation_seconds,
+                         reply.gpu_copy_in_seconds, reply.gpu_training_seconds, reply.gpu_copy_out_seconds,
+                         write_seconds, index_seconds);
         /* SPI_finish releases its context. Keep the result in the caller's context. */
         result = SPI_palloc(json.len + 1);
         memcpy(result, json.data, json.len + 1);

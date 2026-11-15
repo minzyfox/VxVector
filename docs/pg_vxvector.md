@@ -167,27 +167,27 @@ No performance advantage is assumed from successful device execution.
 
 ## Step 6: PostgreSQL integration and final-index quality
 
-The current database runs in a Linux Docker container.
-It cannot directly execute a native macOS Metal worker.
-Select one deployment path after standalone Metal works:
+The development database runs in a Linux Docker container, which cannot directly
+execute a native macOS Metal worker. The Apple GPU path targets native macOS
+PostgreSQL and worker execution. The Linux Docker setup remains CPU-only.
 
 | Path | Work required |
 | --- | --- |
-| Native macOS PostgreSQL and worker | Validate the PostgreSQL extension and its dependencies natively. Invoke the Metal worker as a native process. |
-| Existing Docker PostgreSQL and macOS worker service | Add a host-service transport with bounded requests, lifecycle control, cancellation, and error handling. |
+| Native macOS PostgreSQL and worker (chosen for Apple GPU) | Validate the PostgreSQL extension and its dependencies natively. Invoke the Metal worker as a native process. |
+| Existing Docker PostgreSQL and macOS worker service | Not required for the native macOS target; would need a separate host-service transport. |
 
-Neither path is established by existing Linux worker tests.
-
-- [ ] Choose and validate one deployment path. Keep the current Linux CPU setup usable.
-- [ ] Low priority: VectorChord 1.1.1 does not load in native PostgreSQL 17 on macOS 27.2.1.
+- [x] Choose the native macOS path for Apple GPU execution and keep the Linux CPU setup usable.
+- [x] Send protocol-v2 `auto` requests from SQL, expose `vxvector.backend_mode` (`auto`, `cpu`, `gpu`), and report the worker's backend, reason, device, and GPU timings.
+  The bridge and protocol are covered by CPU fallback SQL tests and simulated GPU worker tests; these do not validate native PostgreSQL on macOS.
+- [ ] Native macOS blocker: VectorChord 1.1.1 does not load in native PostgreSQL 17 on macOS 27.2.1.
   It builds from source against Homebrew `postgresql@17`, but dyld rejects `vchord.dylib` with `mis-aligned LINKEDIT string pool`: its string table starts 4-byte aligned, at `stroff` 6771756.
   pgvector 0.8.2 builds and installs fine. A small Rust library links aligned with the same `-bundle -bundle_loader` flags and `strip = "symbols"`, so the cause is specific to VectorChord's link, probably its fat-LTO release profile with ld-27106. Re-stripping does not fix it.
   VectorChord runs its macOS CI only on request, on macOS 15, and no upstream issue mentions this error.
   Next: try its `dev` or `prof` profile or `lto = "off"`, then report upstream. This blocks only the native macOS path, not Steps 4 and 5.
-- [ ] Extend SQL/backend reporting and version worker communication if its contract changes.
-- [ ] Exercise SQL-to-sampling-to-GPU-training-to-centroid-table-to-VectorChord-index execution.
+- [ ] Resolve the native VectorChord loading blocker and validate PostgreSQL extension loading on macOS.
+- [ ] Exercise native SQL-to-sampling-to-GPU-training-to-centroid-table-to-VectorChord-index execution.
 - [ ] Recheck exact-scan ground truth, held-out recall, and objective quality using the existing declared gates.
-- [ ] Test `auto`, forced CPU, required GPU, worker failure, timeout, cancellation, and transaction rollback.
+- [ ] Test `auto`, forced CPU, required GPU, worker failure, timeout, cancellation, and transaction rollback through native macOS PostgreSQL.
 - [ ] Verify unsupported or missing GPU capability selects CPU without requiring application SQL changes in default mode.
 
 Exit: the PostgreSQL workflow uses the GPU when supported and CPU otherwise, with observable selection and validated index quality.

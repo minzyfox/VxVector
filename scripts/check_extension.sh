@@ -14,9 +14,7 @@ docker exec -i "$container" sh -c 'cat > /tmp/vxvector-crash-worker; chmod 755 /
 ulimit -c 0
 kill -ABRT "$$"
 SH
-output="$(mktemp)"
-trap 'rm -f "$output"; docker exec "$container" rm -f /tmp/vxvector-sleep-worker /tmp/vxvector-sleep-worker.pid /tmp/vxvector-crash-worker >/dev/null 2>&1 || true' EXIT
+trap 'docker exec "$container" rm -f /tmp/vxvector-sleep-worker /tmp/vxvector-sleep-worker.pid /tmp/vxvector-crash-worker >/dev/null 2>&1 || true' EXIT
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U vxvector -d vxvector \
-  < "$project_root/tests/postgres_extension.sql" 2>&1 | tee "$output"
-grep -Fq "GPU acceleration is unavailable; running CPU k-means" "$output"
+  < "$project_root/tests/postgres_extension.sql"
 docker exec "$container" sh -c 'if test -f /tmp/vxvector-sleep-worker.pid && test -d "/proc/$(cat /tmp/vxvector-sleep-worker.pid)"; then echo "Cancelled worker is still alive" >&2; exit 1; fi'

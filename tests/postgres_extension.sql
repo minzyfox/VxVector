@@ -12,6 +12,18 @@ INSERT INTO vxvector_builds SELECT vxvector.create_vector_index(
 INSERT INTO vxvector_builds SELECT vxvector.create_vector_index(
     'vxvector_m3_smoke.source', 'features', ARRAY[4], batch_size => 100,
     skip_index_build => true, centroid_table => 'repeat_centroids');
+SET LOCAL vxvector.backend_mode = 'cpu';
+DO $$
+DECLARE result jsonb;
+BEGIN
+    result := vxvector.create_vector_index(
+        'vxvector_m3_smoke.source', 'features', ARRAY[4],
+        skip_index_build => true, centroid_table => 'forced_cpu_centroids');
+    IF result->>'backend' <> 'cpu' OR result->>'backend_reason' <> 'CPU requested' THEN
+        RAISE EXCEPTION 'Forced CPU backend metadata is invalid: %', result;
+    END IF;
+END $$;
+SET LOCAL vxvector.backend_mode = 'auto';
 
 DO $$
 BEGIN
@@ -27,10 +39,14 @@ BEGIN
     IF EXISTS (SELECT FROM pg_indexes WHERE schemaname='vxvector_m3_smoke' AND indexdef LIKE '%USING vchordrq%') THEN
         RAISE EXCEPTION 'skip_index_build created an index';
     END IF;
-    IF EXISTS (SELECT FROM vxvector_builds WHERE result->>'backend' <> 'cpu' OR
+    IF EXISTS (SELECT FROM vxvector_builds WHERE result->>'backend' NOT IN ('cpu', 'gpu') OR
+               coalesce(result->>'backend_reason', '') = '' OR
+               NOT (result ? 'gpu_version') OR NOT (result ? 'device') OR
+               (result->>'backend' = 'gpu' AND
+                (result->>'gpu_version' IS NULL OR result->>'device' IS NULL)) OR
                (result->>'samples')::integer <> 64 OR result->>'index' IS NOT NULL OR
                (result->>'buffer_bytes')::bigint > 268435456) THEN
-        RAISE EXCEPTION 'CPU result metadata is invalid';
+        RAISE EXCEPTION 'automatic backend selection metadata is invalid';
     END IF;
 END $$;
 

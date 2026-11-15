@@ -17,12 +17,25 @@ production-scale recall and performance still need validation.
 
 | Capability | Status |
 | --- | --- |
-| Training from SQL, then building a VectorChord index | Works, on the **CPU**. Tested in the Docker PostgreSQL image below |
-| Training on an Apple GPU (Metal) | Works in the standalone worker, for every option: L2, inner product, cosine, restarts, spherical centroids, and two-level trees. **SQL does not use it yet** |
+| Training from SQL, then building a VectorChord index | Works on the **CPU** in the Docker PostgreSQL image below. Native macOS SQL now requests automatic backend selection; the full stack still needs end-to-end validation |
+| Training on an Apple GPU (Metal) | Works in the standalone worker, for every option: L2, inner product, cosine, restarts, spherical centroids, and two-level trees. Native PostgreSQL now uses the same worker selection path |
 | Automatic GPU or CPU selection | In the standalone worker (protocol version 2): `auto`, `cpu`, or `gpu`, with the reason reported |
-| PostgreSQL using the GPU | Not yet. The extension sends worker protocol version 1, which trains on the CPU. Step 6 of the [roadmap](docs/pg_vxvector.md) |
-| Installing into your own PostgreSQL | Possible in principle, but **untested**. See [Install into an existing PostgreSQL](#install-into-an-existing-postgresql-untested) |
+| PostgreSQL using the GPU | The extension sends protocol version 2 in `auto` mode. On native macOS it can select Metal; Linux Docker currently falls back to CPU. Full native SQL-to-index validation remains |
+| Installing into your own PostgreSQL | Native macOS extension loading is **untested**. VectorChord 1.1.1 currently fails to load on the tested macOS setup; see [native PostgreSQL setup](#install-into-an-existing-postgresql-untested) |
 | NVIDIA GPUs | Not supported. `src/gpu_lloyd.vx` is an untested compilation prototype |
+
+## Choose the PostgreSQL deployment
+
+The Docker setup below runs PostgreSQL and the VxVector worker inside a **Linux
+container** (currently `linux/amd64`, including under Docker Desktop or Colima on
+Apple Silicon). It is useful for the SQL/VectorChord workflow, but it cannot use
+the Mac's Metal GPU; `auto` selects CPU there.
+
+To use an Apple GPU from SQL, PostgreSQL and the worker must both run natively on
+macOS, with the Metal library beside the worker. Follow
+[Install into an existing PostgreSQL](#install-into-an-existing-postgresql-untested)
+instead. That native path is not yet end-to-end validated, and the known native
+VectorChord loading blocker must be resolved first.
 
 GPU results match the CPU bit for bit for L2 and the inner product in every test. Cosine,
 and spherical centroids on some inputs, can differ at float32 near-ties within a
@@ -87,7 +100,7 @@ The same record covers the Linux worker, the extension, and the PostgreSQL image
 The scripts default to `../../Vx` when `VX_ROOT` is unset. The fresh-checkout
 example overrides that default with its adjacent `../Vx` directory.
 
-### Build the images
+### Build the Linux Docker images
 
 Run the remaining shell commands from the VxVector repository.
 Use the Docker context containing your running engine. For Colima, select it with:
@@ -120,7 +133,7 @@ Both native and Linux builds use the Vx pin. Build manifests record compiler,
 kernel source, and object hashes. The installed database image carries its manifest
 at `/usr/local/libexec/vxvector/vx-build-info.json`.
 
-## Start the existing Docker setup
+## Start the Linux Docker setup
 
 Run these shell commands from the VxVector repository using your Docker context.
 On the current development machine, that context is `colima`.
@@ -216,13 +229,12 @@ source vectors, trains centroids, then indexes all 1,000 source rows.
 The centroid table contains five nodes: a zero-vector root and four leaves.
 The root has `parent = NULL`; each leaf has parent `0`.
 
-The function returns JSON with `backend = "cpu"`, output names, row/sample counts,
-node count, buffer bytes, and stage timings. Training from SQL always uses the CPU
-today, even on a machine with a supported GPU. It emits this expected warning:
-
-```text
-GPU acceleration is unavailable; running CPU k-means
-```
+The function returns JSON with the selected `backend`, the selection reason, device
+and GPU version when applicable, output names, row/sample counts, buffer bytes, and
+stage timings. Backend mode defaults to `auto`: a ready GPU is used when it supports
+the request, otherwise training uses the CPU. The Linux Docker image has no GPU
+library and therefore selects CPU. A native macOS worker built with the Metal library
+can select the Apple GPU.
 
 Each call creates new outputs. Reusing an existing centroid-table or index name
 causes an error. The function does not replace existing objects.
@@ -311,6 +323,19 @@ The returned `index` field is `null`. The call creates only the centroid table.
 | `worker_timeout_ms` | Worker deadline; default 300,000 milliseconds. PostgreSQL statement timeouts also apply. |
 | `residual_quantization` | Forwarded to the VectorChord index options. |
 
+The superuser-only `vxvector.backend_mode` setting accepts `auto` (default), `cpu`,
+or `gpu`. Use `cpu` to force CPU training or `gpu` to require GPU training and return
+an error if no compatible device is available. For example:
+
+```sql
+SET vxvector.backend_mode = 'gpu';
+SELECT vxvector.create_vector_index(
+    'public.items', 'embedding', ARRAY[4],
+    skip_index_build => true
+);
+RESET vxvector.backend_mode;
+```
+
 The first three function arguments are source table, column name, and `lists`.
 See the [complete SQL signature](pg_vxvector/sql/pg_vxvector--0.1.0.sql) for defaults.
 Output names are individual identifiers in the source schema, with at most 63 bytes.
@@ -333,39 +358,39 @@ See the [active roadmap](docs/pg_vxvector.md) for PostgreSQL GPU integration and
 
 ## Install into an existing PostgreSQL (untested)
 
-This path has not been run. The steps mirror what the Docker image installs
-(`docker/Dockerfile.extension`). Treat it as a starting point, not instructions
-that are known to work.
+The native macOS path has not been validated end to end. In particular, VectorChord
+1.1.1 currently fails to load on the tested macOS 27 setup (see Step 6 in the
+[roadmap](docs/pg_vxvector.md)). The following builds the VxVector pieces against a
+native PostgreSQL installation; it does not resolve that VectorChord blocker.
 
 You need PostgreSQL 17 with its server headers, pgvector, and VectorChord. The image
 uses pgvector 0.8.2 and VectorChord 1.1.1, with `shared_preload_libraries = 'vchord'`.
-On macOS 27, VectorChord 1.1.1 builds from source but does not load (see Step 6 in the
-[roadmap](docs/pg_vxvector.md)), so this path is blocked there for now.
 
-1. Build Vx and the native library as in [Prepare the native CPU tests](#prepare-the-native-cpu-tests).
-   This gives `build/kmeans.o` and `build/vxvector-worker`.
-2. Build the extension against your server. Run this from the repository, with
-   `pg_config` from your PostgreSQL:
+1. Build the native Vx CPU library and worker with `./scripts/build.sh`, then build
+   the Metal library with `arch -arm64 ./scripts/build_gpu.sh`. The GPU build places
+   `libvxvector_gpu.dylib` next to the worker, where it is discovered automatically.
+2. Build the extension against the same PostgreSQL installation. Run this from the
+   repository, with `pg_config` from your PostgreSQL:
 
    ```sh
-   (cd pg_vxvector && PGRX_PG_CONFIG_PATH="$(command -v pg_config)" \
-     VXVECTOR_KERNEL_OBJECT="$PWD/../build/kmeans.o" cargo build --locked)
+   ./scripts/build_macos_extension.sh
    ```
 
 3. Install the extension where your server looks for it:
-   - `pg_vxvector/target/debug/libpg_vxvector.so` (`.dylib` on macOS) to `$(pg_config --pkglibdir)`,
-     named `pg_vxvector` with the suffix that the other libraries there use
+   - `pg_vxvector/target/debug/libpg_vxvector.dylib` to `$(pg_config --pkglibdir)`, named
+     `pg_vxvector.dylib`
    - `pg_vxvector/pg_vxvector.control` and `pg_vxvector/sql/pg_vxvector--0.1.0.sql` to `$(pg_config --sharedir)/extension/`
 4. Point the extension at the native worker by setting `vxvector.worker_path` in
-   `postgresql.conf` to the absolute path of `build/vxvector-worker`. It is a superuser setting.
-   The native worker finds `build/libvxvector_kmeans` and Vx's runtime library through
-   absolute paths into this repository and the Vx checkout. So leave both checkouts in
-   place, and make them readable by the server's operating-system user. The Docker image
-   builds a worker without these dependencies (`docker/Dockerfile.extension`).
+   `postgresql.conf` to the absolute path of `build/vxvector-worker`. The worker loads
+   the adjacent `libvxvector_kmeans.dylib` and, if built, `libvxvector_gpu.dylib`.
+   The libraries and the pinned Vx runtime must remain readable by the server's
+   operating-system user.
 5. Restart the server, then run `CREATE EXTENSION vector; CREATE EXTENSION vchord; CREATE EXTENSION pg_vxvector;`.
 
-Then run the [SQL walkthrough](#create-a-table-and-insert-dummy-data). Training uses the
-CPU on this path too.
+Then run the [SQL walkthrough](#create-a-table-and-insert-dummy-data). `auto` selects
+Metal when the native worker can load the GPU library and probe a device; otherwise
+it uses CPU. The returned JSON identifies the backend. Set `vxvector.backend_mode`
+to `cpu` or `gpu` to force or require a mode.
 
 ## Clean up the example
 

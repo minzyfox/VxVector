@@ -3,8 +3,13 @@
 The VxVector image uses PostgreSQL 17 with pgvector and VectorChord 1.1.1.
 The upstream VectorChord image is pinned by manifest digest in `docker/postgres/Dockerfile`.
 The development stage adds C/Clang, libclang, PostgreSQL server headers, Python, and Rust 1.90.0.
-The base image provides build tools. The complete image adds the pgrx extension and separate Linux Vx CPU worker.
-GPU acceleration will come later. This image requires no GPU or CUDA libraries.
+The base image provides build tools. The complete image adds the pgrx extension and separate Linux Vx worker.
+It runs as Linux (currently `linux/amd64`, including under Docker on Apple Silicon), and
+does not have access to the host Mac's Metal GPU. Its worker uses automatic backend
+selection and falls back to CPU because this image does not include an Apple GPU library.
+To use Metal from SQL, PostgreSQL itself must run natively on macOS with the native worker.
+That path still has an end-to-end blocker: VectorChord 1.1.1 does not load in the tested
+native macOS PostgreSQL setup. See [the Step 6 roadmap](pg_vxvector.md#step-6-postgresql-integration-and-final-index-quality).
 
 ## Build and start
 

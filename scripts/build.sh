@@ -2,7 +2,7 @@
 set -euo pipefail
 
 project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-vx_root="${VX_ROOT:-$(cd "$project_root/../.." && pwd)/Vx}"
+vx_root="${VX_ROOT:-$(cd "$project_root/.." && pwd)/Vx}"
 profile="${VX_PROFILE:-debug}"
 revision="$(cat "$project_root/vx-revision.txt")"
 if [[ "$(git -C "$vx_root" rev-parse HEAD)" != "$revision" ]]; then
@@ -50,6 +50,11 @@ mkdir -p "$project_root/build"
       -Wl,-rpath,"$vx_root/target/$profile" -lm \
       -o "$project_root/build/libvxvector_kmeans.so"
   fi
+
+  clang -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror \
+    -I "$project_root/include" "$project_root/src/worker.c" -L "$project_root/build" \
+    -lvxvector_kmeans -Wl,-rpath,"$project_root/build" \
+    -o "$project_root/build/vxvector-worker"
 
   clang -std=c11 -Wall -Wextra -Werror -I "$project_root/include" \
     "$project_root/scripts/benchmark_data_path.c" -L "$project_root/build" \
