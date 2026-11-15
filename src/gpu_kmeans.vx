@@ -1,4 +1,4 @@
-// k-means on the Apple GPU (Steps 3 and 5 of docs/pg_vxvector.md).
+// k-means on the GPU, Apple or NVIDIA (Steps 3 and 5 of docs/pg_vxvector.md).
 //
 // One restart of Lloyd's algorithm on samples that the caller already chose
 // and gathered, in sample order. The policy is in docs/step3_metal_l2.md. It
@@ -16,7 +16,8 @@
 //   status 1. The GPU finishes, and the caller reports the same status.
 //
 // Every tensor is in GPU memory for the whole run. The caller allocates them
-// with vx_metal_alloc, so Metal uses them in place, with no copies.
+// with the GPU's own allocator (src/gpu_backend.h), so the runtime uses them in
+// place, with no copies.
 //
 // Launches stay short. macOS can stop a launch that holds the GPU too long,
 // and the Vx runtime then aborts (docs/step3_metal_l2.md). So each launch does
@@ -33,17 +34,13 @@ import core::num;
 
 // Spherical centers are normalized in float64, as normalize in src/kmeans.vx
 // does, which the GPU cannot. A Vx function cannot read GPU memory, so C does
-// it: the caller passes vxvector_gpu_normalize_rows of src/gpu_l2.c as
-// normalize. An extern declaration of it would not compile, because vxc
-// resolves extern symbols when it emits the object. vx_metal_wait, of the Vx
-// runtime, resolves, and it waits for every launch, so the centers are
-// complete when C reads them. The wait is required: vxc waits before a call
-// to an extern C function that gets GPU memory, but not before a call through
-// a function pointer (docs/vx_issue_drafts_2026-11-14.md, draft 8). Without it,
-// C reads the centers before the kernels write them.
-extern "C" {
-  fn vx_metal_wait() -> void;
-}
+// it: the caller passes a C function of src/gpu_l2.c as normalize. An extern
+// declaration of it would not compile, because vxc resolves extern symbols
+// when it emits the object. vxc waits before a call to an extern C function
+// that gets GPU memory, but not before a call through a function pointer
+// (docs/vx_issue_drafts_2026-11-14.md, draft 8), so the C function waits for
+// the GPU itself before it reads the centers. This file names no runtime of a
+// particular GPU, so it builds for Metal and for CUDA.
 
 // Whether value is finite. x - x is 0 for a finite x, and NaN for an infinity
 // or a NaN. f32::is_finite has no `ensures writes_only()`, so an `across`
@@ -486,7 +483,6 @@ pub fn vxvector_gpu_l2_run_v2(centers: &mut Tensor<f32, [?, ?], Memory::HBM>,
   let update_step = fit(launch_work, i64::from(k) * i64::from(dims), i64::from(n));
   vxvector_gpu_seed_v2(centers, samples, n, k, dims, shift);
   if spherical != 0 {
-    unsafe { vx_metal_wait(); }
     normalize(centers.as_mut_ptr(), k, dims);
   }
   for iteration in 0..iterations {
@@ -501,8 +497,7 @@ pub fn vxvector_gpu_l2_run_v2(centers: &mut Tensor<f32, [?, ?], Memory::HBM>,
     }
     vxvector_gpu_finish_update_v1(centers, sums, counts, samples, n, k, dims, iteration);
     if spherical != 0 {
-      unsafe { vx_metal_wait(); }
-    normalize(centers.as_mut_ptr(), k, dims);
+      normalize(centers.as_mut_ptr(), k, dims);
     }
   }
   vxvector_gpu_assign_all_v1(labels, best, samples, centers, n, k, dims, metric, launch_work);

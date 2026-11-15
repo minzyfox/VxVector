@@ -663,14 +663,15 @@ batch size, and optional buffer budget in bytes (default 64 MiB).
 The reported budget covers adapter buffers. It excludes caller-owned source
 storage, allocator overhead, and Vx runtime memory.
 
-The Apple GPU kernels are in `src/gpu_kmeans.vx`. `src/gpu_lloyd.vx` is a
-separate NVIDIA prototype that accepts device-resident samples and initialized
-centroids. `VX_CHECK_GPU=1 ./scripts/build.sh` emits A100 PTX and its launch
-manifest without requiring NVIDIA hardware. Assignment and update launch
-blocks across rows and centers, respectively, but each block uses one lane and
-scans its work serially. On a Linux NVIDIA host with an Ampere-or-newer GPU
-(compute capability 8.0+) and the CUDA toolkit and driver, run
-`CUDA_HOME=/usr/local/cuda ./scripts/test_gpu_lloyd_cuda.sh` to build the
-worker-compatible CUDA library and check restart and assignment results. The
-library is not yet wired into the PostgreSQL image/build flow. The kernels are
-not a performance implementation.
+The GPU kernels and training loop are in `src/gpu_kmeans.vx`, for Apple and
+NVIDIA GPUs alike. `src/gpu_l2.c` calls them, and one small backend file per GPU
+(`src/gpu_backend_metal.m`, `src/gpu_backend_cuda.c`) supplies memory, copies,
+and waits. `VX_CHECK_GPU=1 ./scripts/build.sh` compiles the kernels to A100 PTX
+without NVIDIA hardware. On Linux with the CUDA toolkit,
+`CUDA_HOME=/usr/local/cuda ./scripts/build_gpu_cuda.sh` builds
+`build/linux/libvxvector_gpu.so`. Build Vx itself where the toolkit is
+installed: only then does it build the CUDA dispatch library that runs the
+kernels on the GPU, and the script refuses any other. The NVIDIA library has not
+run on an NVIDIA GPU yet and is not part of the PostgreSQL image.
+The earlier CUDA Driver API prototype (`src/gpu_lloyd.vx`, `src/gpu_cuda.cpp`,
+`scripts/test_gpu_lloyd_cuda.sh`) remains until that run passes.
