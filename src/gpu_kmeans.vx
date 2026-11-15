@@ -37,7 +37,10 @@ import core::num;
 // normalize. An extern declaration of it would not compile, because vxc
 // resolves extern symbols when it emits the object. vx_metal_wait, of the Vx
 // runtime, resolves, and it waits for every launch, so the centers are
-// complete when C reads them.
+// complete when C reads them. The wait is required: vxc waits before a call
+// to an extern C function that gets GPU memory, but not before a call through
+// a function pointer (docs/vx_issue_drafts_2026-11-14.md, draft 8). Without it,
+// C reads the centers before the kernels write them.
 extern "C" {
   fn vx_metal_wait() -> void;
 }

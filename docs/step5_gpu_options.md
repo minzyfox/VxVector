@@ -20,7 +20,7 @@ Vx is `423a10db`, the current pin. The CPU kernel builds at `-O3` ([record](cpu_
 
 Spherical normalization runs on the CPU because Apple GPUs have no float64. The memory is unified, so the CPU reads and writes the GPU's buffer in place. Normalizing k × dims values costs little.
 
-Normalizing in C is a recorded exception to "logic in Vx": a Vx function cannot read GPU memory. Vx gets it as a function pointer, because `vxc` resolves `extern` symbols when it emits the object, and this one is not built yet then. Before the call, Vx calls the runtime's `vx_metal_wait()`, so the GPU has finished with the buffer.
+Normalizing in C is a recorded exception to "logic in Vx": a Vx function cannot read GPU memory. Vx gets it as a function pointer, because `vxc` resolves `extern` symbols when it emits the object, and this one is not built yet then. Before the call, Vx calls the runtime's `vx_metal_wait()`, so the GPU has finished with the buffer. That wait is required. vxc waits by itself before a call to an `extern` C function that gets GPU memory, but not before a call through a function pointer. A standalone test copied 1,048,576 stale values of 1,048,576 without it ([Vx issue draft 8](vx_issue_drafts_2026-11-14.md)).
 
 The compiler may fuse `squared += wide * wide` into one fused multiply-add, which rounds once instead of twice. That changes the squared norm by about 1e-16, which no test data shows. So [scripts/build_gpu.sh](../scripts/build_gpu.sh) checks the instructions instead: it fails when `vxvector_gpu_normalize_rows` contains `fmadd` or `fmsub`. Built with `-ffp-contract=fast`, it stops with an error.
 
