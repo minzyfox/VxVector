@@ -22,7 +22,7 @@ production-scale recall and performance still need validation.
 | Automatic GPU or CPU selection | `auto`, `cpu`, or `gpu`, in the standalone worker and from SQL through `vxvector.backend_mode`, with the reason reported |
 | PostgreSQL using the GPU | Validated on native macOS 27.2.1 with an Apple M2 Pro: SQL to Metal training to a VectorChord index, failure handling, and the recall gates. Linux Docker falls back to the CPU. See the [Step 6 record](docs/step6_native_macos_2026-11-15.md) |
 | Installing into your own PostgreSQL | Validated on one native macOS setup with Homebrew PostgreSQL 17. VectorChord must be built without stripping; see [native PostgreSQL setup](#install-into-an-existing-postgresql) |
-| NVIDIA GPUs | A worker-compatible CUDA trainer prototype exists, but CUDA toolkit compilation, NVIDIA execution, and SQL integration remain unvalidated |
+| NVIDIA GPUs | Built from the same Vx kernels as Metal (`scripts/build_gpu_cuda.sh`). It compiles and links on Linux, but has not run on an NVIDIA GPU and is not in the PostgreSQL image; see [Library API](#library-api) |
 
 ## Choose the PostgreSQL deployment
 
