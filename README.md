@@ -22,7 +22,7 @@ production-scale recall and performance still need validation.
 | Automatic GPU or CPU selection | In the standalone worker (protocol version 2): `auto`, `cpu`, or `gpu`, with the reason reported |
 | PostgreSQL using the GPU | The extension sends protocol version 2 in `auto` mode. On native macOS it can select Metal; Linux Docker currently falls back to CPU. Full native SQL-to-index validation remains |
 | Installing into your own PostgreSQL | Native macOS extension loading is **untested**. VectorChord 1.1.1 currently fails to load on the tested macOS setup; see [native PostgreSQL setup](#install-into-an-existing-postgresql-untested) |
-| NVIDIA GPUs | A CUDA-driver smoke test can run the A100 PTX on hardware; NVIDIA training is not integrated into the worker |
+| NVIDIA GPUs | A worker-compatible CUDA trainer prototype exists, but CUDA toolkit compilation, NVIDIA execution, and SQL integration remain unvalidated |
 
 ## Choose the PostgreSQL deployment
 
