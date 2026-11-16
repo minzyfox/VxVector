@@ -1,7 +1,7 @@
 // k-means on the GPU, Apple or NVIDIA (Steps 3 and 5 of docs/pg_vxvector.md).
 //
 // One restart of Lloyd's algorithm on samples that the caller already chose
-// and gathered, in sample order. The policy is in docs/step3_metal_l2.md. It
+// and gathered, in sample order. The policy is in docs/gpu_design.md. It
 // follows run_restart in src/kmeans.vx:
 // - Seeds: center c starts at sample (c * n / k + shift) % n, where shift is
 //   that of the restart, 0 for the first.
@@ -20,7 +20,7 @@
 // place, with no copies.
 //
 // Launches stay short. macOS can stop a launch that holds the GPU too long,
-// and the Vx runtime then aborts (docs/step3_metal_l2.md). So each launch does
+// and the Vx runtime then aborts (docs/gpu_design.md). So each launch does
 // at most about launch_work multiply-adds:
 // - Assignment covers a range of rows and a range of centers. labels and best
 //   carry each row's nearest center and its distance from one center range to
@@ -44,7 +44,7 @@ import core::num;
 
 // Whether value is finite. x - x is 0 for a finite x, and NaN for an infinity
 // or a NaN. f32::is_finite has no `ensures writes_only()`, so an `across`
-// loop cannot call it (see docs/step3_metal_l2.md).
+// loop cannot call it (see docs/gpu_design.md).
 fn finite_f32(value: f32) on Topology::Device -> bool
 ensures writes_only()
 {

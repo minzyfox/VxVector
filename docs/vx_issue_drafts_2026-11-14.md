@@ -1,6 +1,6 @@
 # Vx issue drafts (November 14, 2026)
 
-These drafts come from [Step 3](step3_metal_l2.md), L2 k-means on the Apple GPU, and from a later timing run that crashed.
+These drafts come from Step 3, L2 k-means on the Apple GPU, and from a later timing run that crashed.
 Each draft is ready to paste into a GitHub issue in vx-lang/Vx.
 
 All reproductions were run with `vxc 0.0.4 (423a10db)`, which is Vx `main` and the VxVector pin, on an Apple M2 Pro running macOS 27.2.1.
@@ -24,7 +24,7 @@ Related issues are named in each draft.
 | 10 | enhancement | On unified memory, let the CPU write GPU memory in place | as a comment on #2690 |
 
 Drafts 1 and 2 matter most for VxVector. Draft 1 turns a crash into an error that VxVector can handle. Draft 2 removes the cause.
-Drafts 8 to 10 came from Step 5, spherical centers ([record](step5_gpu_options.md)), and were run on November 14 at `423a10db`. Draft 8 is a silent wrong result. VxVector avoids it only by calling `vx_metal_wait()` itself.
+Drafts 8 to 10 came from Step 5, spherical centers (record), and were run on November 14 at `423a10db`. Draft 8 is a silent wrong result. VxVector avoids it only by calling `vx_metal_wait()` itself.
 
 ---
 
