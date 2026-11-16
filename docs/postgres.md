@@ -67,7 +67,7 @@ M3 must document probe settings matching the generated tree depth.
 The checks roll back all smoke tables and indexes after success.
 The script also verifies the C/Clang and Rust tools and compiles a PostgreSQL extension-header probe.
 These checks validate the database image and centroid-table contract.
-See [M3 checks](milestone_3_cpu_integration.md) for the CPU worker and SQL integration.
+
 
 Validated on 2026-10-26 with linux/amd64 Colima: PostgreSQL 17.11, pgvector 0.8.2,
 VectorChord 1.1.1, and Rust/Cargo 1.90.0. The development package installation updates the base server from 17.9 to 17.11.

@@ -322,7 +322,7 @@ class RealGpuTests(unittest.TestCase):
                 # Only cosine has shown float32 near-ties on these inputs, so
                 # L2 and the inner product must match exactly.
                 self.assertEqual(metric, 2, "L2 and inner product must match the CPU exactly")
-                # A float32 near-tie (docs/step5_gpu_options.md): the leaves must
+                # A float32 near-tie (docs/gpu_design.md): the leaves must
                 # score within the declared tolerance of the CPU's on the sample.
                 sample = np.asarray(points, dtype=np.float32)[list(training_rows(rows, leaves, factor, 42))]
                 score = lambda run: float(distances(sample, run.nodes()[1 + roots:], metric).min(axis=1).sum())

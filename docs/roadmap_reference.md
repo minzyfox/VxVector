@@ -52,7 +52,7 @@ A future standalone Vx caller should use the core directly, without the Postgres
 Settle the questions that could block everything else before writing any k-means code.
 
 Feasibility decisions and the deferred GPU reference run are recorded in
-[Milestone 0 findings](milestone_0_feasibility.md).
+Milestone 0 findings.
 GPU availability does not block the CPU data path, Postgres integration, or CPU validation.
 The GPU reference run and hardware validation belong to the later GPU milestone.
 
@@ -60,15 +60,15 @@ The GPU reference run and hardware validation belong to the later GPU milestone.
 - Recorded: Decide the integration boundary. The C ABI works, and the k-means worker will run in a separate process because the current Vx runtime can abort.
 - Recorded: Define the error boundary: Vx code must never unwind or longjmp into a Postgres backend. Write down how failures cross the ABI (return codes, error structs).
 - Recorded: Check how Vx selects its dispatch backend. The README says `build.rs` picks it from what the build machine has, so a portable build made without CUDA ships only the CPU backend. Decide how an extension package should handle this.
-- Recorded: Prepare the CPU development environment, Linux Vx compiler, and worker. See [M3 implementation and checks](milestone_3_cpu_integration.md).
+- Recorded: Prepare the CPU development environment, Linux Vx compiler, and worker.
 - Recorded: Read pgpu's source for the centroid table schema and the exact `CREATE INDEX` options it passes to VectorChord, so our output matches the contract. Confirm the remaining root-parent discrepancy in a live run.
 
 ## Milestone 1: standalone k-means in Vx
 
 Get a correct, benchmarkable k-means running with no Postgres involved. The parameters mirror pgpu's function signature, which is the practical spec.
 
-The CPU library, its checks, and the compile-only GPU prototype are described
-in [Milestone 1 notes](milestone_1_standalone.md).
+The CPU library, its checks, and the compile-only GPU prototype were described
+in the Milestone 1 notes, now in the git history of `docs/`.
 
 - Recorded: Implement the core loop: assign points to nearest centroid, recompute centroids, repeat for `kmeans_iterations` (pgpu default 10).
 - Recorded: Support the three distance operators: `ip`, `l2`, `cos`.
@@ -88,7 +88,7 @@ The current GPU prototype compiles to A100 code but emits no parallel launch met
 
 The host adapter streams source rows into bounded row-major float32 batches and trains Vx on a bounded sample.
 It exposes a C reader callback for the M3 database wrapper. PostgreSQL itself is not implemented in this milestone.
-See [Milestone 2 implementation and checks](milestone_2_data_path.md).
+
 
 - Recorded: Implement contiguous float32 read batches, capped by `batch_size` and the declared row count.
 - Recorded: Collect `min(row_count, leaf_count * sampling_factor)` distinct source rows without materializing the table.
@@ -108,7 +108,7 @@ Additional vector types are follow-up work outside the M4–M7 priority sequence
 ## Milestone 3: Postgres integration — CPU implemented
 
 Wrap the CPU k-means in a pgrx extension that writes the centroid table and invokes VectorChord.
-Implemented and validated without GPU hardware or CUDA libraries. See [M3 details](milestone_3_cpu_integration.md).
+Implemented and validated without GPU hardware or CUDA libraries.
 
 - Recorded: Build and validate a PostgreSQL 17 development image with pgvector, VectorChord, C/Rust tools, and PostgreSQL headers. See [setup and checks](postgres.md).
 - Recorded: Create a pgrx extension crate targeting PostgreSQL 17 first. Extend version support after the first working integration.
@@ -137,7 +137,7 @@ Implemented and validated without GPU hardware or CUDA libraries. See [M3 detail
 Updated November 4, 2026: 48 matched Faiss cases, 96 independent Lloyd cases,
 25 native tests, and six zero/duplicate cases pass. The corrected worker passes
 120 synthetic SQL recall queries and 3,072 real-data queries across 24 paired
-Vx/internal index builds. See [M4 evidence and limits](milestone_4_cpu_correctness.md).
+Vx/internal index builds.
 The internal-trainer objective comparison now passes six quality groups and 3,072
 recall queries in an isolated instrumented image. See [objective evidence](internal_objectives.md).
 M4 remains open for full kernel proofs and a hosted CI result.
@@ -150,7 +150,7 @@ Its data volume and database cluster identifier are unchanged.
 Native correctness, both platforms' contract/code-generation checks, PostgreSQL integration,
 snapshot behavior, and 120 synthetic recall queries pass on the new pin.
 Real-data and internal-objective suites retain their November 4 evidence.
-See [the November 5 audit and validation](vx_main_update_2026-11-05.md).
+
 
 ### Compiler upgrade and local database handoff
 
@@ -203,7 +203,7 @@ Establish the reference-test baseline first. Add small structural proofs alongsi
 Do not make whole-algorithm verification a prerequisite for CPU correctness work.
 
 - Recorded: Check native Vx contracts on both available compilers. Record the initial bounded-index, fixed-offset, and positive-count helpers. Preserve historical failure evidence for the nearest-loop and variable-offset examples.
-- Recorded: Require a positive centroid count in `nearest` and prove that its result is a valid centroid index. This requires the Vx proof fixes described in [the proof update](m4_index_proofs_2026-11-05.md).
+- Recorded: Require a positive centroid count in `nearest` and prove that its result is a valid centroid index. This required Vx proof fixes (vx-lang/Vx#2847 to #2850).
 - Recorded: Carry the result contract into `accumulate_point`. Its numeric requirements check the centroid index at the real caller. Foreign allocation and initialization requirements remain trusted.
 - Historical candidate: Prove distance and centroid buffer indices stay within the native buffer/view bounds, given valid dimensions and row/centroid indices.
 - Historical candidate: Finish checking multiplication, addition, and offsets for machine-integer overflow. The widened `buffer_index` helper now proves row-major centroid offsets under bounded dimensions. Source sampling and metadata offsets remain open.
@@ -300,7 +300,7 @@ Exit criterion: reproducible performance and recall comparisons against cuVS, wi
 ## Vx capabilities to evaluate and gaps to propose
 
 This assessment uses the [pinned Vx source](https://github.com/vx-lang/Vx/tree/ded616150af9a3372ad7e6badbc68ebb824c5c8b), updated November 5, 2026.
-See [the November 5 capability audit](vx_main_update_2026-11-05.md) for evidence and limits.
+
 Unchecked items describe remaining VxVector work. They do not imply that Vx lacks the feature.
 Check existing APIs and backend support before proposing a language or library change.
 Being expressible is only the starting point: this project should also produce
@@ -320,7 +320,7 @@ The checks below establish specific capabilities, not completed VxVector GPU sup
 - Recorded: Verify reusable `lanes::copy_async` tokens with the upstream pipeline's PTX and FileCheck checks. Native CUDA overlap remains untested here.
 - Recorded: Verify the Apple GPU backend with MSL generation and native Metal execution. The existing GPU fixture and its four-worker CPU copy produce identical checked output.
 - Historical candidate: Evaluate an optional Apple GPU clustering experiment. The backend currently rejects f64 device types, atomics, dynamic shared memory, and vector operations. Preserve the f64-distance baseline rather than silently changing precision. This experiment does not replace M6's NVIDIA validation.
-- Recorded: Resolve the reduced nearest-index and variable-offset proof gaps on the Vx proof branch. Adopt the nearest result contract and centroid offset helper in the kernel. See [validation and remaining boundaries](m4_index_proofs_2026-11-05.md).
+- Recorded: Resolve the reduced nearest-index and variable-offset proof gaps on the Vx proof branch. Adopt the nearest result contract and centroid offset helper in the kernel.
 - Historical candidate: Track pointer clauses in loop invariants and type invariants as proposals. The November 5 design documents are not implemented features.
 
 The tensor, SIMD, and collective API files did not change across this upgrade.
@@ -373,7 +373,7 @@ remaining buffer, sampling, and division proofs remain separate M4 verifier ques
 
 Prioritize these application-driven candidates alongside the capability audits.
 The observed needs are concrete; the exact API or compiler changes still require
-small reproductions against the pinned compiler. An existing workaround does not
+small reproductions against the pinned compiler. An existing workaround does no
 by itself establish that the language or library provides an efficient, safe interface.
 
 | Candidate | Evidence or application need | Proposed Vx outcome |
@@ -490,7 +490,7 @@ GPU performance against cuVS is a later question and does not block CPU integrat
 ## Research assessment: faster clustering and retrieval quality — November 4, 2026
 
 This dated assessment records research candidates and the reasons for their priority.
-The [November 5 audit](vx_main_update_2026-11-05.md) updates its Vx capability assumptions.
+The November 5 audit updates its Vx capability assumptions.
 It preserves the preceding roadmap and does not mark these candidates as implemented.
 The recommendations below come from comparing the cited sources with the current VxVector code.
 They are proposals for experiments, not measured VxVector improvements.
@@ -527,7 +527,7 @@ The two-level implementation trains all leaves globally, then clusters those lea
 into roots. This produces a hierarchical index description, but does not reduce
 the cost of global leaf training. Its dominant leaf-assignment work is approximately:
 
-```text
+```tex
 restarts × iterations × sampled rows × leaf count × dimensions
 ```
 
@@ -621,7 +621,7 @@ small-K Multi-K experiments do not establish performance for VxVector's embeddin
 - Historical candidate: Select K using held-out recall versus query latency/candidate count, build time, and memory. Raw objectives across different K values are not a sufficient selection criterion.
 
 Batched restarts are the first application experiment because they reuse an existing
-VxVector operation. Classifier encoders, Gini-based screening, and XGBoost pruning target
+VxVector operation. Classifier encoders, Gini-based screening, and XGBoost pruning targe
 a different quality objective and remain outside this vector-index work.
 
 ### Communication-aware composition across operations
@@ -633,7 +633,7 @@ strategy avoids redistributing the large kernel matrix and arranges outputs for
 local assignment updates, using selective replication and collective reductions.
 
 Kernel k-means is not a drop-in replacement for our ordinary centroid training:
-its N-by-N kernel matrix changes the problem and resource requirements. Implicit
+its N-by-N kernel matrix changes the problem and resource requirements. Implici
 feature-space centroids do not generally provide ordinary input-space centroid
 vectors for the current VectorChord handoff. Borrow the composition principle.
 
@@ -664,10 +664,10 @@ with two iterations of patience. This requires queries and exact-neighbor ground
 truth. See [SuperKMeans, section 3.3](https://arxiv.org/html/2603.20009v1#S3.SS3).
 
 VxVector could evaluate partition recall inside the worker after each iteration.
-Partition recall measures whether the searched partitions contain the exact nearest
+Partition recall measures whether the searched partitions contain the exact neares
 neighbors. It does not require rebuilding a PostgreSQL index every iteration.
 The current worker receives a bounded training sample, so full-source validation
-requires additional inputs. Sample-only ground truth must be labeled as such; it
+requires additional inputs. Sample-only ground truth must be labeled as such; i
 does not establish partition recall over the full database.
 
 Candidate work:
@@ -688,7 +688,7 @@ quantization also affect results. Validate the final index at practical probe an
 epsilon settings before adopting a stopping policy. Preserve the existing sample
 objective as a diagnostic; any change to restart selection needs its own comparison.
 
-### Recursive training followed by local refinement
+### Recursive training followed by local refinemen
 
 Elastic recursively splits groups, then refines assignments using nearby-centroid
 shortlists. This refinement helps correct mistakes from early coarse partitions.
@@ -720,12 +720,12 @@ Training recursion and exported index depth need not be identical.
 ### SOAR and the index integration boundary
 
 SOAR assigns each vector to an additional partition. It chooses that assignment to
-reduce correlated retrieval errors rather than simply selecting the second-nearest
+reduce correlated retrieval errors rather than simply selecting the second-neares
 centroid. Its derivation targets maximum inner product search. Overlapping partitions
 require query-result deduplication.
 See [SOAR, sections 2–3](https://arxiv.org/pdf/2404.00774).
 
-Changing sample assignments in `kmeans.vx` would not enable SOAR in the current
+Changing sample assignments in `kmeans.vx` would not enable SOAR in the curren
 PostgreSQL flow. Those assignments never cross the worker boundary. The centroid
 handoff does not express multiple partition memberships for source rows.
 The existing `residual_quantization` option does not supply that interface.
@@ -746,7 +746,7 @@ path is established. Do not infer support from the presence of residual quantiza
 The current real-data baseline uses 8,192 source rows, 32 leaves, and
 GloVe-25/SIFT-128. It provides bounded correctness evidence, not evidence for large,
 high-dimensional clustering performance. Database timings under x86 emulation remain
-diagnostic. See [M4 validation and limits](milestone_4_cpu_correctness.md).
+diagnostic.
 
 SuperKMeans reports little benefit at very small centroid counts and stronger gains
 on larger workloads. Its headline speedups are not expected VxVector gains.
@@ -777,7 +777,7 @@ These experiments supplement the existing M4–M7 sequence. They do not establis
 execution or replace the later cuVS comparison. Decide which candidates to retain
 from measured build time, retrieval quality, query cost, and memory use.
 
-### References for this assessment
+### References for this assessmen
 
 External research and interface documentation:
 
@@ -793,11 +793,6 @@ External research and interface documentation:
 Local design, validation, and implementation references:
 
 - [README: architecture, options, current limits, and test entry points](../README.md).
-- [M1: standalone library and compile-only GPU prototype](milestone_1_standalone.md).
-- [M2: bounded sampling and CPU data path](milestone_2_data_path.md).
-- [M3: CPU worker and PostgreSQL integration](milestone_3_cpu_integration.md).
-- [M4: CPU correctness, real-data recall, and evidence limits](milestone_4_cpu_correctness.md).
-- [Vx main update: compiler pin, kernel contracts, and validation](vx_main_update_2026-11-04.md).
 - [M5: SIMD and compiler work](#milestone-5-simd-and-vx-compilerstandard-library-enhancements).
 - [M6: GPU enablement](#milestone-6-gpu-enablement-and-vx-enhancements).
 - [M7: performance comparison against cuVS](#milestone-7-performance-comparison-against-cuvs).
@@ -815,7 +810,7 @@ These are optional research directions outside the current milestone commitments
 SSR learns sparse token representations and searches inverted posting lists rather
 than training a centroid codebook. It is an alternative representation and retrieval
 pipeline, requiring a learned projector and sparse scoring/index support beyond
-VxVector's external-centroid handoff. Its retrieval results do not establish a replacement
+VxVector's external-centroid handoff. Its retrieval results do not establish a replacemen
 for arbitrary dense-vector nearest-neighbor search.
 
 - Historical candidate: Evaluate the authors' implementation with a frozen encoder/projector on a small document corpus before implementing kernels in Vx.

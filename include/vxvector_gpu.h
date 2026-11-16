@@ -22,7 +22,7 @@ enum vxvector_gpu_status {
  * Step 3: one restart of L2 Lloyd's algorithm on the Apple GPU, macOS only.
  *
  * samples holds n row-major float32 vectors of dims elements, already chosen
- * and in sample order. The policy is in docs/step3_metal_l2.md. It matches one
+ * and in sample order. The policy is in docs/gpu_design.md. It matches one
  * restart of the CPU kernel with restarts=1, the L2 metric, no spherical
  * normalization and no roots, given the same samples, except that the GPU adds
  * squared distances in float32 instead of float64.
@@ -32,7 +32,7 @@ enum vxvector_gpu_status {
  * copied once into GPU memory, which stays resident for every iteration.
  *
  * launch_work bounds the multiply-adds of each GPU launch, 0 for the default:
- * 2^26 on Metal, because macOS can stop a long launch (docs/step3_metal_l2.md),
+ * 2^26 on Metal, because macOS can stop a long launch (docs/gpu_design.md),
  * and no split on CUDA. The split does not change the result.
  *
  * Requires 0 < k <= n, dims > 0, iterations > 0, launch_work >= 0,

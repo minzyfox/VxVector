@@ -3,7 +3,7 @@ independent float64 calculations, with evidence that Metal ran every kernel.
 
 The parent process runs each case in a worker process with
 VX_DISPATCH_VERBOSE=1 and reads the Metal runtime's log. The policy that these
-gates check is in docs/step3_metal_l2.md.
+gates check is in docs/gpu_design.md.
 
 Run with the arm64 Python of build/correctness-venv after scripts/build.sh and
 scripts/build_gpu.sh.
@@ -54,7 +54,7 @@ METRIC_CASES = {"blobs", "wide_rows", "one_past_a_block", "uniform", "empty_clus
 SPHERICAL_CASES = {"blobs", "wide_rows", "uniform", "empty_clusters", "empty_replacement",
                    "group_ties", "sift_8192", "cosine_near_ties"}
 # Inputs with float32 near-ties. GPU and CPU may diverge there, and the gate is
-# the declared tolerance of docs/step5_gpu_options.md, not equal bits.
+# the declared tolerance of docs/gpu_design.md, not equal bits.
 TOLERANT_CASES = {"cosine_near_ties"}
 # Runs of other cases that met float32 near-ties: SIFT-128 against spherical
 # (unit) centers under L2, where 152 labels diverged with an objective 1.9e-8
@@ -225,7 +225,7 @@ def normalize(centers):
 
 
 def reference_lloyd(samples, k, iterations, metric=0, spherical=0):
-    """The policy of docs/step3_metal_l2.md in NumPy, independent of both Vx
+    """The policy of docs/gpu_design.md in NumPy, independent of both Vx
     kernels: seeds at c * n // k, float64 assignment, sequential float32 sums
     in sample order (cumsum adds in order), and empty-cluster replacement."""
     n = len(samples)

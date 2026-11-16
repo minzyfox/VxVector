@@ -180,7 +180,7 @@ TODO list:
 - **An `unsafe` block trusts the clauses of the calls in it.** This is by design. See
   section 3.
 - **Block-parallel `across` exists for CPU,** according to the
-  [November 5 update](vx_main_update_2026-11-05.md). The Apple GPU backend rejects f64, atomics and vector operations.
+  November 5 update. The Apple GPU backend rejects f64, atomics and vector operations.
 
 ## TODO list
 
