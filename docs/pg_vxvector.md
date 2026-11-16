@@ -22,7 +22,9 @@ Each Vx gap needs a recorded issue, and each exception a recorded reason, rather
 
 ## Current state and evidence limits
 
-The project pins Vx `423a10db` (main, November 14) in [vx-revision.txt](../vx-revision.txt).
+The project pins Vx `889a1fbb` (main, November 15) in [vx-revision.txt](../vx-revision.txt).
+The previous pin, `423a10db`, was a branch commit that is not on `main`.
+At `889a1fbb`, the compiler writes the same native `kmeans.o`, Metal object, Metal source, and A100 PTX as at `423a10db`, byte for byte.
 The kernel and data path were validated on native macOS arm64 at `df51035d`, and again at `423a10db`, which emits the same `kmeans.o`.
 
 The CPU core, bounded sampling adapter, separate worker, and PostgreSQL/VectorChord integration are implemented.
