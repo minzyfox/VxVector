@@ -59,7 +59,6 @@ Then follow the SQL walkthrough below to create, index, and query a small table.
 
 ### Prerequisites
 
-- Access to the `minzyfox/vextor` repository, which is private.
 - Git, Docker, and Docker Compose with a running Docker engine.
 - Python 3.14 for the host scripts and the pinned correctness-test environment.
 - Internet access for source checkouts, container images, and optional test datasets.
